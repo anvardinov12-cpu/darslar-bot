@@ -1,435 +1,369 @@
-import logging
 import os
+import logging
 from datetime import datetime, timedelta
+from urllib.parse import quote
 import pytz
 from dotenv import load_dotenv
 
-load_dotenv()
-
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram import (
+    Update,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    ReplyKeyboardMarkup,
+    KeyboardButton
+)
 from telegram.constants import ParseMode
 from telegram.ext import (
     Application,
     CommandHandler,
-    ContextTypes,
     MessageHandler,
-    filters,
+    CallbackQueryHandler,
+    ConversationHandler,
+    ContextTypes,
+    filters
 )
 
 import database as db
-from parser import parse_lessons_text
 
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO,
-)
-logger = logging.getLogger(__name__)
-
+load_dotenv()
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
-SUPER_ADMIN_IDS = {
-    int(x) for x in os.environ.get("ADMIN_IDS", "").replace(" ", "").split(",") if x
-}
-
 TZ = pytz.timezone("Asia/Tashkent")
 
-REMINDER_TYPES = [
-    ("1d", timedelta(days=1), "1 kun"),
-    ("12h", timedelta(hours=12), "12 soat"),
-    ("6h", timedelta(hours=6), "6 soat"),
-    ("1h", timedelta(hours=1), "1 soat"),
-    ("start", timedelta(minutes=0), None),
-]
+logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 
-CHECK_INTERVAL_SECONDS = 60
+# Conversation States
+WAITING_GROUP_NAME, WAITING_LESSON_DATA = range(2)
 
-def is_super_admin(user_id: int) -> bool:
-    return user_id in SUPER_ADMIN_IDS
+# --- Helper: Google Calendar Link Generator ---
+def create_gcal_link(title: str, start_dt: datetime, details: str = ""):
+    end_dt = start_dt + timedelta(hours=1)
+    fmt = "%Y%m%dT%H%M%SZ"
+    
+    # Convert local to UTC for Google Calendar Link
+    start_utc = start_dt.astimezone(pytz.utc).strftime(fmt)
+    end_utc = end_dt.astimezone(pytz.utc).strftime(fmt)
+    
+    base_url = "https://calendar.google.com/calendar/render?action=TEMPLATE"
+    url = f"{base_url}&text={quote(title)}&dates={start_utc}/{end_utc}&details={quote(details)}"
+    return url
 
-def can_manage_group(user_id: int, group) -> bool:
-    if group is None:
-        return False
-    return group["owner_id"] == user_id or is_super_admin(user_id)
-
-def get_main_keyboard():
+# --- Keyboards ---
+def main_menu_keyboard():
     keyboard = [
-        [KeyboardButton("📚 Yaqin darslar (/lessons)"), KeyboardButton("➕ Yangi guruh (/create_group)")],
-        [KeyboardButton("📂 Guruhlarim (/my_groups)"), KeyboardButton("❓ Yordam (/help)")]
+        [KeyboardButton("📚 Mening Darslarim"), KeyboardButton("➕ Yangi Guruh Yaratish")],
+        [KeyboardButton("⚙️ Guruhlarimni Boshqarish"), KeyboardButton("❓ Yordam")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-# ---------------------- Commands ----------------------
+# --- Commands & Handlers ---
 
-async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     args = context.args
 
+    # Direct Invite Link via Deep Linking
     if args and args[0].startswith("g_"):
         code = args[0][2:]
         group = db.get_group_by_code(code)
-        if not group:
-            await update.message.reply_text("❌ Bu havola noto'g'ri yoki guruh o'chirilgan.")
+        if group:
+            db.add_subscriber(user.id, group["id"])
+            await update.message.reply_text(
+                f"🎉 Siz **{group['name']}** guruhiga muvaffaqiyatli a'zo bo'ldingiz!\n\n"
+                f"Endi darslar va eslatmalar ushbu bot orqali kelib turadi.",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=main_menu_keyboard()
+            )
             return
-        db.add_subscriber(user.id, group["id"], user.username, user.first_name)
-        await update.message.reply_text(
-            f"✅ Siz *{group['name']}* guruhiga muvaffaqiyatli obuna bo'ldingiz!\n\n"
-            f"Darslar vaqtidan oldin va dars boshlanganda avtomatik bildirishnoma olasiz.",
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=get_main_keyboard()
-        )
-        return
+        else:
+            await update.message.reply_text("❌ Guruh topilmadi yoki havola eskirgan.")
 
-    text = (
-        f"Assalomu alaykum, {user.first_name}! 👋\n\n"
-        f"Ushbu bot darslar va mashg'ulotlar haqida o'z vaqtida eslatib turadi.\n"
-        f"Pastdagi tugmalar orqali botdan foydalanishingiz mumkin."
+    await update.message.reply_text(
+        f"Xush kelibsiz, **{user.first_name}**! 👋\n\n"
+        f"Bot orqali darslaringizni rejalashtiring va o'z vaqtida eslatmalar oling.",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=main_menu_keyboard()
     )
-    await update.message.reply_text(text, reply_markup=get_main_keyboard())
 
-async def create_group_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# --- Group Creation (Conversation) ---
+async def start_create_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "📝 *Yangi guruh nomini kiriting:*\n\n"
+        "Masalan: `Frontend React 12-guruh` yoki `Ingliz tili IELTS`",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    return WAITING_GROUP_NAME
+
+async def save_group_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    name = " ".join(context.args).strip()
+    name = update.message.text.strip()
     
-    if not name:
-        await update.message.reply_text(
-            "⚠️ Guruh nomini yozing!\n\n"
-            "Masalan:\n`/create_group Oliy Matematika - 201-guruh`",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return
-
     group = db.create_group(name, user.id)
-    me = await context.bot.get_me()
-    link = f"https://t.me/{me.username}?start=g_{group['invite_code']}"
+    bot = await context.bot.get_me()
+    invite_link = f"https://t.me/{bot.username}?start=g_{group['invite_code']}"
 
     text = (
-        f"✅ *Guruh yaratildi!*\n\n"
-        f"📌 *Guruh Nomi:* {group['name']}\n"
-        f"🆔 *Guruh ID:* `{group['id']}`\n\n"
-        f"🔗 *Taklif havolasi (Odamlarga ulashish uchun):*\n`{link}`\n\n"
-        f"➕ Dars qo'shish uchun quyidagi buyruqni bosing:\n`/add_lessons {group['id']}`"
+        f"✅ **Guruh Yaratildi!**\n\n"
+        f"📌 **Nomi:** {group['name']}\n"
+        f"🔗 **A'zo bo'lish havolasi:**\n`{invite_link}`\n\n"
+        f"Ushbu havolani o'quvchilaringizga ulashing."
     )
-    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
-
-async def my_groups_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    owned = db.get_groups_owned_by(user.id)
     
-    if not owned:
-        await update.message.reply_text(
-            "Siz yaratgan guruhlar yo'q.\n"
-            "Yangi guruh yaratish uchun: `/create_group Guruh Nomi`",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("➕ Dars Qo'shish", callback_data=f"addlesson_{group['id']}")]
+    ])
 
-    me = await context.bot.get_me()
-    lines = ["📋 *Siz egalik qiladigan guruhlar:*\n"]
-    for g in owned:
-        link = f"https://t.me/{me.username}?start=g_{g['invite_code']}"
-        subs = db.count_subscribers(g["id"])
-        lines.append(
-            f"📚 *{g['name']}* (ID: `{g['id']}`)\n"
-            f"👥 Obunachilar: {subs} ta\n"
-            f"🔗 Havola: `{link}`\n"
-            f"🛠 *Boshqarish:*\n"
-            f"  └ Dars qo'shish: `/add_lessons {g['id']}`\n"
-            f"  └ Nomini o'zgartirish: `/edit_group {g['id']} Yangi Nom`\n"
-            f"  └ Guruhni o'chirish: `/delete_group {g['id']}`\n"
-        )
-    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+    return ConversationHandler.END
 
-async def edit_group_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# --- Manage Groups ---
+async def show_managed_groups(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    if len(context.args) < 2:
-        await update.message.reply_text("Foydalanish: `/edit_group <guruh_id> <yangi_nom>`", parse_mode=ParseMode.MARKDOWN)
-        return
-    
-    try:
-        group_id = int(context.args[0])
-    except ValueError:
-        await update.message.reply_text("Guruh ID raqam bo'lishi kerak.")
-        return
+    groups = db.get_user_owned_groups(user.id)
 
-    new_name = " ".join(context.args[1:]).strip()
-    group = db.get_group_by_id(group_id)
-
-    if not can_manage_group(user.id, group):
-        await update.message.reply_text("❌ Siz bu guruhni o'zgartira olmaysiz!")
-        return
-
-    db.update_group_name(group_id, new_name)
-    await update.message.reply_text(f"✅ Guruh nomi *{new_name}* deb o'zgartirildi.", parse_mode=ParseMode.MARKDOWN)
-
-async def delete_group_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    if not context.args:
-        await update.message.reply_text("Foydalanish: `/delete_group <guruh_id>`", parse_mode=ParseMode.MARKDOWN)
-        return
-
-    try:
-        group_id = int(context.args[0])
-    except ValueError:
-        await update.message.reply_text("Guruh ID raqam bo'lishi kerak.")
-        return
-
-    group = db.get_group_by_id(group_id)
-    if not can_manage_group(user.id, group):
-        await update.message.reply_text("❌ Siz bu guruhni o'chira olmaysiz!")
-        return
-
-    db.delete_group(group_id)
-    await update.message.reply_text(f"🗑 Guruh (ID: {group_id}) va uning darslari o'chirildi.")
-
-async def add_lessons_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-
-    if not context.args:
-        text = (
-            "⚠️ *Dars qo'shish yo'riqnomasi:*\n\n"
-            "Buyruq va matnni quyidagi shaklda birga yuboring:\n\n"
-            "`/add_lessons <guruh_id>`\n"
-            "O'qituvchi Ismi\n"
-            "Учитель\n"
-            "Dars Mavzusi\n"
-            "Fan Nomi\n"
-            "YYYY-MM-DD HH:MM\n\n"
-            "📌 *Misol:*\n"
-            "`/add_lessons 1`\n"
-            "Anvar Ahmad\n"
-            "Учитель\n"
-            "Tazkiya - Qalb kasalliklari\n"
-            "Aqida\n"
-            "2026-08-10 20:00"
-        )
-        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
-        return
-
-    try:
-        group_id = int(context.args[0])
-    except ValueError:
-        await update.message.reply_text("Guruh ID raqam bo'lishi kerak. Masalan: /add_lessons 1")
-        return
-
-    group = db.get_group_by_id(group_id)
-    if not can_manage_group(user.id, group):
-        await update.message.reply_text("❌ Siz faqat o'zingiz yaratgan guruhga dars qo'sha olasiz!")
-        return
-
-    full_text = update.message.text
-    parts = full_text.split("\n", 1)
-    text_to_parse = parts[1] if len(parts) > 1 else ""
-
-    if not text_to_parse.strip():
-        await update.message.reply_text(
-            "⚠️ Dars ma'lumotlarini buyruqdan keyingi qatorlarga yozing!\n"
-            "Namuna ko'rish uchun shunchaki `/add_lessons` deb yuboring.",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return
-
-    lessons, errors = parse_lessons_text(text_to_parse)
-
-    added = 0
-    for lesson in lessons:
-        db.add_lesson(
-            group_id=group_id,
-            title=lesson["title"],
-            teacher=lesson["teacher"],
-            subject=lesson["subject"],
-            start_time_iso=lesson["start_time_iso"],
-        )
-        added += 1
-
-    reply = f"✅ *{group['name']}* guruhiga {added} ta dars muvaffaqiyatli qo'shildi."
-    if errors:
-        reply += "\n\n⚠️ *Xatoliklar:* \n" + "\n".join(errors)
-
-    await update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN)
-
-async def delete_lesson_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    if not context.args:
-        await update.message.reply_text("Foydalanish: `/delete_lesson <dars_id>`", parse_mode=ParseMode.MARKDOWN)
-        return
-    try:
-        lesson_id = int(context.args[0])
-    except ValueError:
-        await update.message.reply_text("Dars ID raqam bo'lishi kerak.")
-        return
-
-    lesson = db.get_lesson(lesson_id)
-    if not lesson:
-        await update.message.reply_text("Bunday dars topilmadi.")
-        return
-
-    group = db.get_group_by_id(lesson["group_id"])
-    if not can_manage_group(user.id, group):
-        await update.message.reply_text("❌ Siz bu darsni o'chira olmaysiz!")
-        return
-
-    db.delete_lesson(lesson_id)
-    await update.message.reply_text(f"🗑 Dars (ID: {lesson_id}) o'chirildi.")
-
-async def lessons_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    groups = db.get_user_groups(user.id)
     if not groups:
-        await update.message.reply_text("Siz hech qaysi guruhga obuna emassiz.")
+        await update.message.reply_text("Sizda hali yaratilgan guruhlar yo'q.")
         return
 
-    all_lines = []
+    keyboard = []
     for g in groups:
-        rows = db.get_upcoming_lessons(g["id"], limit=10)
-        if not rows:
+        keyboard.append([InlineKeyboardButton(f"📁 {g['name']}", callback_data=f"managegroup_{g['id']}")])
+
+    await update.message.reply_text(
+        "⚙️ **Boshqarish uchun guruhni tanlang:**",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def group_manage_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    data = query.data
+    bot = await context.bot.get_me()
+
+    if data.startswith("managegroup_"):
+        gid = int(data.split("_")[1])
+        group = db.get_group(gid)
+        invite_link = f"https://t.me/{bot.username}?start=g_{group['invite_code']}"
+        
+        text = (
+            f"📌 **Guruh:** {group['name']}\n"
+            f"🔗 **A'zolik havolasi:** `{invite_link}`\n\n"
+            f"Kerakli amalni tanlang:"
+        )
+        
+        btns = [
+            [InlineKeyboardButton("➕ Dars Qo'shish", callback_data=f"addlesson_{gid}")],
+            [InlineKeyboardButton("📋 Darslar Ro'yxati / O'chirish", callback_data=f"listlessons_{gid}")],
+            [InlineKeyboardButton("🗑 Guruhni O'chirish", callback_data=f"delgroup_{gid}")]
+        ]
+        await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(btns))
+
+    elif data.startswith("delgroup_"):
+        gid = int(data.split("_")[1])
+        db.delete_group(gid)
+        await query.edit_message_text("🗑 Guruh va undagi barcha darslar o'chirildi.")
+
+# --- Lesson Addition (Conversation) ---
+async def start_add_lesson(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    gid = int(query.data.split("_")[1])
+    context.user_data["target_group_id"] = gid
+
+    text = (
+        "✍️ **Dars ma'lumotlarini quyidagi shaklda yuboring:**\n\n"
+        "`Dars Mavzusi`\n"
+        "`O'qituvchi Ismi`\n"
+        "`Onlayn Dars Linki (bo'lsa, aks holda - qo'ying)`\n"
+        "`YYYY-MM-DD HH:MM` (Sana va vaqt)\n\n"
+        "📌 **Misol:**\n"
+        "Python Boshlang'ich Dars\n"
+        "Anvar Karimov\n"
+        "https://zoom.us/j/123456789\n"
+        "2026-08-15 19:00"
+    )
+    await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    return WAITING_LESSON_DATA
+
+async def save_lesson_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    gid = context.user_data.get("target_group_id")
+    lines = [line.strip() for line in update.message.text.split("\n") if line.strip()]
+
+    if len(lines) < 4:
+        await update.message.reply_text("⚠️ Noto'g'ri format! Ma'lumotlar 4 ta qatordan iborat bo'lishi kerak. Qayta urinib ko'ring.")
+        return WAITING_LESSON_DATA
+
+    title, teacher, link, date_str = lines[0], lines[1], lines[2], lines[3]
+
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d %H:%M")
+        start_iso = dt.strftime("%Y-%m-%d %H:%M:00")
+    except ValueError:
+        await update.message.reply_text("⚠️ Sana vaqt formati xato! `YYYY-MM-DD HH:MM` ko'rinishida yozing (Masalan: `2026-08-15 19:00`).")
+        return WAITING_LESSON_DATA
+
+    db.add_lesson(
+        group_id=gid,
+        title=title,
+        teacher=teacher,
+        meeting_link="" if link == "-" else link,
+        start_time_iso=start_iso
+    )
+
+    await update.message.reply_text("✅ **Dars muvaffaqiyatli qo'shildi!**", parse_mode=ParseMode.MARKDOWN, reply_markup=main_menu_keyboard())
+    return ConversationHandler.END
+
+# --- Student Lesson Viewing ---
+async def show_student_lessons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    groups = db.get_user_subscribed_groups(user.id)
+
+    if not groups:
+        await update.message.reply_text("Siz hech qaysi guruhga a'zo emassiz.")
+        return
+
+    has_lessons = False
+    for g in groups:
+        lessons = db.get_upcoming_lessons_for_group(g["id"])
+        if not lessons:
             continue
-        all_lines.append(f"📚 *{g['name']}*")
-        for r in rows:
-            dt = datetime.strptime(r["start_time"], "%Y-%m-%d %H:%M:%S")
-            all_lines.append(
-                f" 🆔 Dars ID: `{r['id']}`\n"
-                f" 📅 Vaqti: {dt.strftime('%d.%m.%Y %H:%M')}\n"
-                f" 📖 Dars: {r['title']}\n"
-                f" 👤 Ustoz: {r['teacher']} ({r['subject']})\n"
+        
+        has_lessons = True
+        for l in lessons:
+            dt_naive = datetime.strptime(l["start_time"], "%Y-%m-%d %H:%M:%S")
+            dt_loc = TZ.localize(dt_naive)
+            gcal_link = create_gcal_link(l["title"], dt_loc, f"O'qituvchi: {l['teacher']}")
+
+            text = (
+                f"📚 **Guruh:** {g['name']}\n"
+                f"📖 **Dars:** {l['title']}\n"
+                f"👤 **Ustoz:** {l['teacher']}\n"
+                f"📅 **Vaqti:** {dt_loc.strftime('%d.%m.%Y %H:%M')}"
             )
 
-    if not all_lines:
-        await update.message.reply_text("Hozircha rejalashtirilgan darslar yo'q.")
+            btns = [[InlineKeyboardButton("📅 Google Kalendarga qo'shish", url=gcal_link)]]
+            if l["meeting_link"]:
+                btns.append([InlineKeyboardButton("🔗 Onlayn Darsga Kirish", url=l["meeting_link"])])
+
+            await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(btns))
+
+    if not has_lessons:
+        await update.message.reply_text("Yaqin orada rejalashtirilgan darslar yo'q.")
+
+# --- Lesson Management (List / Delete) ---
+async def list_lessons_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    gid = int(query.data.split("_")[1])
+    lessons = db.get_upcoming_lessons_for_group(gid)
+
+    if not lessons:
+        await query.message.reply_text("Ushbu guruhda darslar mavjud emas.")
         return
 
-    await update.message.reply_text("\n".join(all_lines), parse_mode=ParseMode.MARKDOWN)
+    for l in lessons:
+        dt = datetime.strptime(l["start_time"], "%Y-%m-%d %H:%M:%S")
+        text = f"📖 **{l['title']}**\n🗓 {dt.strftime('%d.%m.%Y %H:%M')}"
+        btn = InlineKeyboardMarkup([[InlineKeyboardButton("🗑 O'chirish", callback_data=f"dellesson_{l['id']}")]])
+        await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=btn)
 
-async def stop_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    groups = db.get_user_groups(user.id)
-    if not groups:
-        await update.message.reply_text("Siz hech qanday guruhga obuna emassiz.")
-        return
-    if not context.args:
-        lines = ["Chiqmoqchi bo'lgan guruh buyrug'ini bosing:\n"]
-        for g in groups:
-            lines.append(f"• {g['name']} -> `/stop {g['id']}`")
-        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
-        return
-    try:
-        group_id = int(context.args[0])
-    except ValueError:
-        await update.message.reply_text("Guruh ID raqam bo'lishi kerak.")
-        return
-    db.remove_subscriber(user.id, group_id)
-    await update.message.reply_text("✅ Obuna bekor qilindi.")
+async def delete_lesson_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    lid = int(query.data.split("_")[1])
+    db.delete_lesson(lid)
+    await query.edit_message_text("🗑 Dars o'chirildi.")
 
-async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = (
-        "📌 *Bot buyruqlari:* \n\n"
-        "• `/start` - Botni ishga tushirish\n"
-        "• `/lessons` - Yaqin darslar ro'yxati\n"
-        "• `/create_group <nomi>` - Yangi guruh yaratish\n"
-        "• `/my_groups` - Siz yaratgan guruhlar va boshqaruv\n"
-        "• `/add_lessons` - Dars qo'shish yo'riqnomasi\n"
-        "• `/delete_lesson <dars_id>` - Darsni o'chirish\n"
-        "• `/delete_group <guruh_id>` - Guruhni o'chirish\n"
-        "• `/stop <guruh_id>` - Guruh obunasini bekor qilish"
-    )
-    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
-
-async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = update.message.text
-    if "Yaqin darslar" in msg:
-        await lessons_cmd(update, context)
-    elif "Yangi guruh" in msg:
-        await update.message.reply_text("Yangi guruh yaratish uchun: `/create_group Guruh Nomi`", parse_mode=ParseMode.MARKDOWN)
-    elif "Guruhlarim" in msg:
-        await my_groups_cmd(update, context)
-    elif "Yordam" in msg:
-        await help_cmd(update, context)
-
-# ---------------------- Eslatmalar ----------------------
-
-async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
+# --- Background Task: Reminders ---
+async def check_and_send_reminders(context: ContextTypes.DEFAULT_TYPE):
     now = db.get_now()
     lessons = db.get_all_future_lessons()
 
-    for lesson in lessons:
-        start_time_naive = datetime.strptime(lesson["start_time"], "%Y-%m-%d %H:%M:%S")
-        start_time = TZ.localize(start_time_naive)
+    reminder_rules = [
+        ("1d", timedelta(days=1), "1 kun"),
+        ("2h", timedelta(hours=2), "2 soat"),
+        ("15m", timedelta(minutes=15), "15 daqiqa"),
+        ("now", timedelta(minutes=0), "Boshlandi")
+    ]
 
-        for code, offset, label in REMINDER_TYPES:
-            if db.was_reminder_sent(lesson["id"], code):
+    for l in lessons:
+        dt_naive = datetime.strptime(l["start_time"], "%Y-%m-%d %H:%M:%S")
+        start_dt = TZ.localize(dt_naive)
+
+        for code, offset, label in reminder_rules:
+            if db.was_reminder_sent(l["id"], code):
                 continue
 
-            reminder_moment = start_time - offset
-            window_start = reminder_moment
-            window_end = reminder_moment + timedelta(seconds=CHECK_INTERVAL_SECONDS)
-
-            if window_start <= now < window_end:
-                subscribers = db.get_active_subscribers(lesson["group_id"])
-                if not subscribers:
-                    db.mark_reminder_sent(lesson["id"], code)
-                    continue
-
-                if code == "start":
-                    text = (
-                        f"🔴 *Dars boshlandi!*\n\n"
-                        f"📚 *Dars:* {lesson['title']}\n"
-                        f"👤 *Ustoz:* {lesson['teacher']}\n"
-                        f"🏷 *Fan:* {lesson['subject']}"
-                    )
+            target_time = start_dt - offset
+            # 2 minutlik oyna ichida tekshiramiz
+            if target_time <= now < target_time + timedelta(minutes=2):
+                subscribers = db.get_subscribers(l["group_id"])
+                
+                if code == "now":
+                    msg = f"🔴 **Dars boshlandi!**\n\n📖 **{l['title']}**\n👤 Ustoz: {l['teacher']}"
                 else:
-                    text = (
-                        f"⏰ *Darsga {label} qoldi!*\n\n"
-                        f"📚 *Dars:* {lesson['title']}\n"
-                        f"👤 *Ustoz:* {lesson['teacher']}\n"
-                        f"🏷 *Fan:* {lesson['subject']}\n"
-                        f"🕐 *Boshlanish vaqti:* {start_time.strftime('%d.%m.%Y %H:%M')}"
-                    )
+                    msg = f"⏰ **Eslatma:** Darsga **{label}** qoldi!\n\n📖 **{l['title']}**\n👤 Ustoz: {l['teacher']}\n🕐 Vaqti: {start_dt.strftime('%H:%M')}"
 
-                for user_id in subscribers:
+                btns = []
+                if l["meeting_link"]:
+                    btns.append([InlineKeyboardButton("🔗 Darsga kirish", url=l["meeting_link"])])
+                
+                markup = InlineKeyboardMarkup(btns) if btns else None
+
+                for uid in subscribers:
                     try:
-                        await context.bot.send_message(
-                            chat_id=user_id, text=text, parse_mode=ParseMode.MARKDOWN
-                        )
-                    except Exception as e:
-                        logger.warning(f"Xabar yuborilmadi user_id={user_id}: {e}")
+                        await context.bot.send_message(chat_id=uid, text=msg, parse_mode=ParseMode.MARKDOWN, reply_markup=markup)
+                    except Exception:
+                        pass
 
-                db.mark_reminder_sent(lesson["id"], code)
+                db.mark_reminder_sent(l["id"], code)
 
-# ---------------------- Main ----------------------
-
-async def post_init(application: Application):
-    await application.bot.set_my_commands([
-        ("start", "Botni qayta ishga tushirish"),
-        ("lessons", "Yaqin darslar ro'yxati"),
-        ("create_group", "Yangi guruh yaratish"),
-        ("my_groups", "Guruhlarim va ularni boshqarish"),
-        ("add_lessons", "Darslar qo'shish yo'riqnomasi"),
-        ("stop", "Obunani bekor qilish"),
-        ("help", "Yordam va yo'riqnoma"),
-    ])
-
+# --- Main App ---
 def main():
     if not BOT_TOKEN:
-        raise SystemExit("BOT_TOKEN environment variable topilmadi!")
+        raise SystemExit("BOT_TOKEN o'zgaruvchisi o'rnatilmagan!")
 
     db.init_db()
+    app = Application.builder().token(BOT_TOKEN).build()
 
-    app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
+    # Group creation conversation
+    create_group_conv = ConversationHandler(
+        entry_points=[MessageHandler(filters.Regex("^➕ Yangi Guruh Yaratish$"), start_create_group)],
+        states={
+            WAITING_GROUP_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_group_name)]
+        },
+        fallbacks=[]
+    )
 
-    app.add_handler(CommandHandler("start", start_cmd))
-    app.add_handler(CommandHandler("create_group", create_group_cmd))
-    app.add_handler(CommandHandler("edit_group", edit_group_cmd))
-    app.add_handler(CommandHandler("delete_group", delete_group_cmd))
-    app.add_handler(CommandHandler("my_groups", my_groups_cmd))
-    app.add_handler(CommandHandler("add_lessons", add_lessons_cmd))
-    app.add_handler(CommandHandler("delete_lesson", delete_lesson_cmd))
-    app.add_handler(CommandHandler("lessons", lessons_cmd))
-    app.add_handler(CommandHandler("stop", stop_cmd))
-    app.add_handler(CommandHandler("help", help_cmd))
+    # Lesson addition conversation
+    add_lesson_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(start_add_lesson, pattern="^addlesson_")],
+        states={
+            WAITING_LESSON_DATA: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_lesson_data)]
+        },
+        fallbacks=[]
+    )
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(create_group_conv)
+    app.add_handler(add_lesson_conv)
     
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
+    app.add_handler(MessageHandler(filters.Regex("^📚 Mening Darslarim$"), show_student_lessons))
+    app.add_handler(MessageHandler(filters.Regex("^⚙️ Guruhlarimni Boshqarish$"), show_managed_groups))
+    
+    app.add_handler(CallbackQueryHandler(group_manage_callback, pattern="^(managegroup_|delgroup_)"))
+    app.add_handler(CallbackQueryHandler(list_lessons_callback, pattern="^listlessons_"))
+    app.add_handler(CallbackQueryHandler(delete_lesson_callback, pattern="^dellesson_"))
 
-    app.job_queue.run_repeating(check_reminders, interval=CHECK_INTERVAL_SECONDS, first=5)
+    # Background Job (Reminders every 60 seconds)
+    app.job_queue.run_repeating(check_and_send_reminders, interval=60, first=10)
 
-    logger.info("Bot Toshkent vaqti bilan muvaffaqiyatli ishga tushdi...")
+    logger = logging.getLogger(__name__)
+    logger.info("Zamonaviy Bot Ishga Tushdi...")
     app.run_polling()
 
 if __name__ == "__main__":
