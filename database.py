@@ -1,14 +1,10 @@
-"""
-Ma'lumotlar bazasi: guruhlar, darslar, obunachilar, yuborilgan eslatmalar.
-O'zbekiston vaqti (UTC+5) va avto-o'chirish mexanizmi bilan.
-"""
-import secrets
 import sqlite3
+import secrets
 from contextlib import contextmanager
 from datetime import datetime
 import pytz
 
-DB_PATH = "bot_data.db"
+DB_PATH = "modern_bot.db"
 TZ = pytz.timezone("Asia/Tashkent")
 
 def get_now():
@@ -31,18 +27,13 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 invite_code TEXT UNIQUE NOT NULL,
-                owner_id INTEGER NOT NULL,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                owner_id INTEGER NOT NULL
             )
         """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS subscribers (
                 user_id INTEGER,
                 group_id INTEGER,
-                username TEXT,
-                first_name TEXT,
-                active INTEGER DEFAULT 1,
-                subscribed_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (user_id, group_id)
             )
         """)
@@ -52,10 +43,8 @@ def init_db():
                 group_id INTEGER NOT NULL,
                 title TEXT NOT NULL,
                 teacher TEXT,
-                subject TEXT,
-                start_time TEXT NOT NULL,
-                duration_min INTEGER DEFAULT 60,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                meeting_link TEXT,
+                start_time TEXT NOT NULL
             )
         """)
         conn.execute("""
@@ -66,152 +55,91 @@ def init_db():
             )
         """)
 
-# ---------------------- Groups ----------------------
-
+# --- Groups ---
 def create_group(name: str, owner_id: int):
     code = secrets.token_urlsafe(5).replace("-", "").replace("_", "")[:8]
     with get_db() as conn:
         cur = conn.execute(
             "INSERT INTO groups (name, invite_code, owner_id) VALUES (?, ?, ?)",
-            (name, code, owner_id),
+            (name, code, owner_id)
         )
         group_id = cur.lastrowid
+        # Admin guruhiga avto obuna bo'ladi
+        conn.execute("INSERT OR IGNORE INTO subscribers (user_id, group_id) VALUES (?, ?)", (owner_id, group_id))
         return conn.execute("SELECT * FROM groups WHERE id = ?", (group_id,)).fetchone()
 
-def update_group_name(group_id: int, new_name: str):
+def get_user_owned_groups(owner_id: int):
     with get_db() as conn:
-        conn.execute("UPDATE groups SET name = ? WHERE id = ?", (new_name, group_id))
+        return conn.execute("SELECT * FROM groups WHERE owner_id = ?", (owner_id,)).fetchall()
 
-def delete_group(group_id: int):
+def get_user_subscribed_groups(user_id: int):
     with get_db() as conn:
-        conn.execute("DELETE FROM groups WHERE id = ?", (group_id,))
-        conn.execute("DELETE FROM subscribers WHERE group_id = ?", (group_id,))
-        lessons = conn.execute("SELECT id FROM lessons WHERE group_id = ?", (group_id,)).fetchall()
-        for l in lessons:
-            conn.execute("DELETE FROM sent_reminders WHERE lesson_id = ?", (l["id"],))
-        conn.execute("DELETE FROM lessons WHERE group_id = ?", (group_id,))
+        return conn.execute("""
+            SELECT g.* FROM groups g
+            JOIN subscribers s ON s.group_id = g.id
+            WHERE s.user_id = ?
+        """, (user_id,)).fetchall()
+
+def get_group(group_id: int):
+    with get_db() as conn:
+        return conn.execute("SELECT * FROM groups WHERE id = ?", (group_id,)).fetchone()
 
 def get_group_by_code(code: str):
     with get_db() as conn:
         return conn.execute("SELECT * FROM groups WHERE invite_code = ?", (code,)).fetchone()
 
-def get_group_by_id(group_id: int):
+def delete_group(group_id: int):
     with get_db() as conn:
-        return conn.execute("SELECT * FROM groups WHERE id = ?", (group_id,)).fetchone()
+        conn.execute("DELETE FROM groups WHERE id = ?", (group_id,))
+        conn.execute("DELETE FROM subscribers WHERE group_id = ?", (group_id,))
+        conn.execute("DELETE FROM lessons WHERE group_id = ?", (group_id,))
 
-def get_groups_owned_by(owner_id: int):
+# --- Subscribers ---
+def add_subscriber(user_id: int, group_id: int):
     with get_db() as conn:
-        return conn.execute(
-            "SELECT * FROM groups WHERE owner_id = ? ORDER BY id ASC", (owner_id,)
-        ).fetchall()
+        conn.execute("INSERT OR IGNORE INTO subscribers (user_id, group_id) VALUES (?, ?)", (user_id, group_id))
 
-def get_all_groups():
+def get_subscribers(group_id: int):
     with get_db() as conn:
-        return conn.execute("SELECT * FROM groups ORDER BY id ASC").fetchall()
-
-# ---------------------- Subscribers ----------------------
-
-def add_subscriber(user_id, group_id, username, first_name):
-    with get_db() as conn:
-        conn.execute("""
-            INSERT INTO subscribers (user_id, group_id, username, first_name, active)
-            VALUES (?, ?, ?, ?, 1)
-            ON CONFLICT(user_id, group_id) DO UPDATE SET active = 1, username = excluded.username
-        """, (user_id, group_id, username, first_name))
-
-def remove_subscriber(user_id, group_id):
-    with get_db() as conn:
-        conn.execute(
-            "UPDATE subscribers SET active = 0 WHERE user_id = ? AND group_id = ?",
-            (user_id, group_id),
-        )
-
-def get_active_subscribers(group_id):
-    with get_db() as conn:
-        rows = conn.execute(
-            "SELECT user_id FROM subscribers WHERE group_id = ? AND active = 1", (group_id,)
-        ).fetchall()
+        rows = conn.execute("SELECT user_id FROM subscribers WHERE group_id = ?", (group_id,)).fetchall()
         return [r["user_id"] for r in rows]
 
-def get_user_groups(user_id):
+# --- Lessons ---
+def add_lesson(group_id: int, title: str, teacher: str, meeting_link: str, start_time_iso: str):
     with get_db() as conn:
-        rows = conn.execute("""
-            SELECT g.* FROM groups g
-            JOIN subscribers s ON s.group_id = g.id
-            WHERE s.user_id = ? AND s.active = 1
-            ORDER BY g.name
-        """, (user_id,)).fetchall()
-        return rows
+        conn.execute("""
+            INSERT INTO lessons (group_id, title, teacher, meeting_link, start_time)
+            VALUES (?, ?, ?, ?, ?)
+        """, (group_id, title, teacher, meeting_link, start_time_iso))
 
-def count_subscribers(group_id):
-    with get_db() as conn:
-        row = conn.execute(
-            "SELECT COUNT(*) AS c FROM subscribers WHERE group_id = ? AND active = 1", (group_id,)
-        ).fetchone()
-        return row["c"]
-
-# ---------------------- Lessons ----------------------
-
-def add_lesson(group_id, title, teacher, subject, start_time_iso, duration_min=60):
-    with get_db() as conn:
-        cur = conn.execute("""
-            INSERT INTO lessons (group_id, title, teacher, subject, start_time, duration_min)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (group_id, title, teacher, subject, start_time_iso, duration_min))
-        return cur.lastrowid
-
-def cleanup_expired_lessons():
-    """O'tib ketgan darslarni avtomatik o'chirish (start_time + duration_min dan o'tgan bo'lsa)"""
+def cleanup_lessons():
     now_str = get_now().strftime("%Y-%m-%d %H:%M:%S")
     with get_db() as conn:
-        expired = conn.execute(
-            "SELECT id FROM lessons WHERE start_time < ?", (now_str,)
-        ).fetchall()
-        for row in expired:
-            conn.execute("DELETE FROM sent_reminders WHERE lesson_id = ?", (row["id"],))
-            conn.execute("DELETE FROM lessons WHERE id = ?", (row["id"],))
+        conn.execute("DELETE FROM lessons WHERE start_time < ?", (now_str,))
 
-def get_upcoming_lessons(group_id, limit=50):
-    cleanup_expired_lessons()
+def get_upcoming_lessons_for_group(group_id: int):
+    cleanup_lessons()
     now_str = get_now().strftime("%Y-%m-%d %H:%M:%S")
     with get_db() as conn:
         return conn.execute("""
-            SELECT * FROM lessons
-            WHERE group_id = ? AND start_time >= ?
-            ORDER BY start_time ASC
-            LIMIT ?
-        """, (group_id, now_str, limit)).fetchall()
+            SELECT * FROM lessons WHERE group_id = ? AND start_time >= ? ORDER BY start_time ASC
+        """, (group_id, now_str)).fetchall()
 
 def get_all_future_lessons():
-    cleanup_expired_lessons()
-    return get_active_lessons_for_reminders()
-
-def get_active_lessons_for_reminders():
+    cleanup_lessons()
     with get_db() as conn:
         return conn.execute("SELECT * FROM lessons ORDER BY start_time ASC").fetchall()
 
-def get_lesson(lesson_id):
-    with get_db() as conn:
-        return conn.execute("SELECT * FROM lessons WHERE id = ?", (lesson_id,)).fetchone()
-
-def delete_lesson(lesson_id):
+def delete_lesson(lesson_id: int):
     with get_db() as conn:
         conn.execute("DELETE FROM lessons WHERE id = ?", (lesson_id,))
-        conn.execute("DELETE FROM sent_reminders WHERE lesson_id = ?", (lesson_id,))
 
-# ---------------------- Reminder tracking ----------------------
-
-def was_reminder_sent(lesson_id, reminder_type):
+# --- Reminders ---
+def was_reminder_sent(lesson_id: int, r_type: str):
     with get_db() as conn:
-        row = conn.execute(
-            "SELECT 1 FROM sent_reminders WHERE lesson_id = ? AND reminder_type = ?",
-            (lesson_id, reminder_type),
-        ).fetchone()
+        row = conn.execute("SELECT 1 FROM sent_reminders WHERE lesson_id = ? AND reminder_type = ?", (lesson_id, r_type)).fetchone()
         return row is not None
 
-def mark_reminder_sent(lesson_id, reminder_type):
+def mark_reminder_sent(lesson_id: int, r_type: str):
     with get_db() as conn:
-        conn.execute(
-            "INSERT OR IGNORE INTO sent_reminders (lesson_id, reminder_type) VALUES (?, ?)",
-            (lesson_id, reminder_type),
-        )
+        conn.execute("INSERT OR IGNORE INTO sent_reminders (lesson_id, reminder_type) VALUES (?, ?)", (lesson_id, r_type))
