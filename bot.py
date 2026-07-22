@@ -248,7 +248,13 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     if not BOT_TOKEN:
-        raise SystemExit("BOT_TOKEN environment variable topilmadi! .env faylni tekshiring.")
+        # Diagnostika: qaysi environment variable'lar mavjudligini ko'rsatamiz
+        # (qiymatlarni emas, faqat nomlarini - xavfsizlik uchun)
+        env_keys = sorted(os.environ.keys())
+        logger.error("BOT_TOKEN topilmadi! Mavjud environment variable nomlari:")
+        for k in env_keys:
+            logger.error(f"  - {k}")
+        raise SystemExit("BOT_TOKEN environment variable topilmadi! Yuqoridagi ro'yxatni tekshiring.")
 
     db.init_db()
 
