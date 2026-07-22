@@ -7,6 +7,9 @@ import pytz
 DB_PATH = "modern_bot.db"
 TZ = pytz.timezone("Asia/Tashkent")
 
+# Sukut bo'yicha (default) barcha eslatma turlari
+DEFAULT_REMINDERS = ["24h", "12h", "6h", "1h", "15m", "now"]
+
 def get_now():
     return datetime.now(TZ)
 
@@ -38,6 +41,17 @@ def init_db():
             )
         """)
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS user_settings (
+                user_id INTEGER PRIMARY KEY,
+                rem_24h INTEGER DEFAULT 1,
+                rem_12h INTEGER DEFAULT 1,
+                rem_6h INTEGER DEFAULT 1,
+                rem_1h INTEGER DEFAULT 1,
+                rem_15m INTEGER DEFAULT 1,
+                rem_now INTEGER DEFAULT 1
+            )
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS lessons (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 group_id INTEGER NOT NULL,
@@ -50,8 +64,9 @@ def init_db():
         conn.execute("""
             CREATE TABLE IF NOT EXISTS sent_reminders (
                 lesson_id INTEGER,
+                user_id INTEGER,
                 reminder_type TEXT,
-                PRIMARY KEY (lesson_id, reminder_type)
+                PRIMARY KEY (lesson_id, user_id, reminder_type)
             )
         """)
 
@@ -64,7 +79,6 @@ def create_group(name: str, owner_id: int):
             (name, code, owner_id)
         )
         group_id = cur.lastrowid
-        # Admin guruhiga avto obuna bo'ladi
         conn.execute("INSERT OR IGNORE INTO subscribers (user_id, group_id) VALUES (?, ?)", (owner_id, group_id))
         return conn.execute("SELECT * FROM groups WHERE id = ?", (group_id,)).fetchone()
 
@@ -98,11 +112,29 @@ def delete_group(group_id: int):
 def add_subscriber(user_id: int, group_id: int):
     with get_db() as conn:
         conn.execute("INSERT OR IGNORE INTO subscribers (user_id, group_id) VALUES (?, ?)", (user_id, group_id))
+        conn.execute("INSERT OR IGNORE INTO user_settings (user_id) VALUES (?)", (user_id,))
 
 def get_subscribers(group_id: int):
     with get_db() as conn:
         rows = conn.execute("SELECT user_id FROM subscribers WHERE group_id = ?", (group_id,)).fetchall()
         return [r["user_id"] for r in rows]
+
+# --- User Notification Settings ---
+def get_user_settings(user_id: int):
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM user_settings WHERE user_id = ?", (user_id,)).fetchone()
+        if not row:
+            conn.execute("INSERT INTO user_settings (user_id) VALUES (?)", (user_id,))
+            row = conn.execute("SELECT * FROM user_settings WHERE user_id = ?", (user_id,)).fetchone()
+        return dict(row)
+
+def toggle_user_setting(user_id: int, r_type: str):
+    col = f"rem_{r_type}"
+    curr = get_user_settings(user_id)
+    new_val = 0 if curr.get(col, 1) == 1 else 1
+    with get_db() as conn:
+        conn.execute(f"UPDATE user_settings SET {col} = ? WHERE user_id = ?", (new_val, user_id))
+    return new_val
 
 # --- Lessons ---
 def add_lesson(group_id: int, title: str, teacher: str, meeting_link: str, start_time_iso: str):
@@ -134,12 +166,12 @@ def delete_lesson(lesson_id: int):
     with get_db() as conn:
         conn.execute("DELETE FROM lessons WHERE id = ?", (lesson_id,))
 
-# --- Reminders ---
-def was_reminder_sent(lesson_id: int, r_type: str):
+# --- Reminders Log ---
+def was_reminder_sent(lesson_id: int, user_id: int, r_type: str):
     with get_db() as conn:
-        row = conn.execute("SELECT 1 FROM sent_reminders WHERE lesson_id = ? AND reminder_type = ?", (lesson_id, r_type)).fetchone()
+        row = conn.execute("SELECT 1 FROM sent_reminders WHERE lesson_id = ? AND user_id = ? AND reminder_type = ?", (lesson_id, user_id, r_type)).fetchone()
         return row is not None
 
-def mark_reminder_sent(lesson_id: int, r_type: str):
+def mark_reminder_sent(lesson_id: int, user_id: int, r_type: str):
     with get_db() as conn:
-        conn.execute("INSERT OR IGNORE INTO sent_reminders (lesson_id, reminder_type) VALUES (?, ?)", (lesson_id, r_type))
+        conn.execute("INSERT OR IGNORE INTO sent_reminders (lesson_id, user_id, reminder_type) VALUES (?, ?, ?)", (lesson_id, user_id, r_type))
