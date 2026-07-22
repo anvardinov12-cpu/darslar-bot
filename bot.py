@@ -92,7 +92,7 @@ async def create_group_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not name:
         await update.message.reply_text(
             "⚠️ Guruh nomini yozing!\n\n"
-            "Masalan:\n`/create_group Tazkiya kursi - 1-guruh`",
+            "Masalan:\n`/create_group Oliy Matematika - 201-guruh`",
             parse_mode=ParseMode.MARKDOWN
         )
         return
