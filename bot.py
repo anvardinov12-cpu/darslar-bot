@@ -165,7 +165,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             db.add_subscriber(user.id, group["id"], user.first_name)
             await update.message.reply_text(
                 f"🎉 Siz **{group['name']}** guruhiga muvaffaqiyatli a'zo bo'ldingiz!\n\n"
-                f"Dars eslatmalari darsingizdan 1 kun, 12,6,1 soat, 15 daqiqa va dars boshlanganida yuboriladi.",
+                f"Dars eslatmalari darsingizdan 1 kun, 12,6,1 soat, 15 daqiqa avval va dars boshlanganida yuboriladi.",
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=main_menu_keyboard()
             )
