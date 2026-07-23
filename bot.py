@@ -346,12 +346,28 @@ async def show_user_subscriptions(update: Update, context: ContextTypes.DEFAULT_
 
 async def unsubscribe_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
-    gid = int(query.data.split("_")[1])
-    user_id = query.from_user.id
+    await query.answer("Obuna bekor qilinmoqda...") # <-- Shu yerga matn qo'shing
     
-    db.remove_subscriber(user_id, gid)
-    await query.edit_message_text("✅ Guruh obunasi muvaffaqiyatli bekor qilindi va endi bu guruhdan eslatmalar kelmaydi.")
+    try:
+        gid = int(query.data.split("_")[1])
+        user_id = query.from_user.id
+        
+        db.remove_subscriber(user_id, gid)
+        
+        # Yangilangan obunalar ro'yxatini qaytadan chiqarish yoki xabarni o'zgartirish
+        groups = db.get_user_subscribed_groups(user_id)
+        if not groups:
+            await query.edit_message_text("✅ Obuna bekor qilindi.\n\nSizda hozircha faol obunalar yo'q.")
+            return
+
+        text = "📋 **Sizning obunalaringiz:**\n\nQuyidagi guruhlardan birortasining eslatmalarini to'xtatish uchun obunani bekor qilishingiz mumkin:"
+        keyboard = []
+        for g in groups:
+            keyboard.append([InlineKeyboardButton(f"❌ {g['name']} - Obunani bekor qilish", callback_data=f"unsub_{g['id']}")])
+
+        await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(keyboard))
+    except Exception as e:
+        await query.edit_message_text(f"⚠️ Xatolik yuz berdi: {e}")
 
 async def ics_download_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
