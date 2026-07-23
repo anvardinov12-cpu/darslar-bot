@@ -400,6 +400,10 @@ async def delete_lesson_callback(update: Update, context: ContextTypes.DEFAULT_T
     db.delete_lesson(lid)
     await query.edit_message_text("🗑 Dars o'chirildi.")
 
+# Media fayllarni taqiqlash funksiyasi
+async def block_media_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("⚠️ Kechirasiz, bot faqat matnli buyruqlarni qabul qiladi. Iltimos, fayl yoki rasm yubormang!")
+
 # --- SUPER ADMIN PANEL ---
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -549,6 +553,7 @@ def main():
     app.add_handler(CallbackQueryHandler(group_manage_callback, pattern="^(managegroup_|delgroup_)"))
     app.add_handler(CallbackQueryHandler(list_lessons_callback, pattern="^listlessons_"))
     app.add_handler(CallbackQueryHandler(delete_lesson_callback, pattern="^dellesson_"))
+    app.add_handler(MessageHandler(~filters.TEXT & ~filters.COMMAND, block_media_handler))
 
     app.job_queue.run_repeating(check_and_send_reminders, interval=60, first=10)
 
