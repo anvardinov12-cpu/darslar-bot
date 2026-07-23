@@ -39,6 +39,48 @@ WAIT_BULK_LESSONS = 2
 BROADCAST_WAIT_MSG = 100
 GROUP_ANNOUNCE_WAIT_MSG = 101
 
+# --- ICS Calendar Generator ---
+def generate_ics_calendar(group_name: str, lessons: list) -> io.BytesIO:
+    ics_content = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Dars Eslatuvchi Bot//UZ",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        f"X-WR-CALNAME:{group_name}"
+    ]
+
+    for l in lessons:
+        dt_naive = datetime.strptime(l["start_time"], "%Y-%m-%d %H:%M:%S")
+        dt_utc = dt_naive - timedelta(hours=5)
+        dt_start_str = dt_utc.strftime("%Y%m%dT%H%M%SZ")
+        dt_end_str = (dt_utc + timedelta(hours=1, minutes=30)).strftime("%Y%m%dT%H%M%SZ")
+
+        summary = l["title"]
+        description = f"Ustoz: {l['teacher']}"
+        location = l["meeting_link"] if l["meeting_link"] else ""
+
+        ics_content.extend([
+            "BEGIN:VEVENT",
+            f"SUMMARY:{summary}",
+            f"DESCRIPTION:{description}",
+            f"LOCATION:{location}",
+            f"DTSTART:{dt_start_str}",
+            f"DTEND:{dt_end_str}",
+            f"UID:lesson_{l['id']}@darsbot",
+            "BEGIN:VALARM\nACTION:DISPLAY\nDESCRIPTION:Darsga 1 kun qoldi!\nTRIGGER:-P1D\nEND:VALARM",
+            "BEGIN:VALARM\nACTION:DISPLAY\nDESCRIPTION:Darsga 1 soat qoldi!\nTRIGGER:-PT1H\nEND:VALARM",
+            "BEGIN:VALARM\nACTION:DISPLAY\nDESCRIPTION:Darsga 15 daqiqa qoldi!\nTRIGGER:-PT15M\nEND:VALARM",
+            "BEGIN:VALARM\nACTION:DISPLAY\nDESCRIPTION:Dars boshlandi!\nTRIGGER:PT0M\nEND:VALARM",
+            "END:VEVENT"
+        ])
+
+    ics_content.append("END:VCALENDAR")
+    file_bytes = "\r\n".join(ics_content).encode('utf-8')
+    bio = io.BytesIO(file_bytes)
+    bio.name = f"{group_name}_darslar.ics"
+    return bio
+
 # --- Keyboards ---
 BTN_LESSONS = "📚 Mening Darslarim"
 BTN_SETTINGS = "⚙️ Eslatma Sozlamalari"
@@ -55,7 +97,7 @@ def main_menu_keyboard():
 
 cancel_keyboard = ReplyKeyboardMarkup([[KeyboardButton(BTN_BACK)]], resize_keyboard=True)
 
-# --- Start & Deep Linking ---
+# --- Start ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     args = context.args
@@ -90,10 +132,7 @@ async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     def icon(val): return "✅" if val == 1 else "❌"
 
-    text = (
-        "⚙️ **Eslatma Sozlamalari**\n\n"
-        "Qaysi vaqtlarda shaxsiy lichkangizga eslatma kelishini tanlang:"
-    )
+    text = "⚙️ **Eslatma Sozlamalari**\n\nQaysi vaqtlarda shaxsiy lichkangizga eslatma kelishini tanlang:"
 
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton(f"{icon(st['rem_24h'])} 1 kun (24 soat) oldin", callback_data="toggle_24h")],
@@ -118,18 +157,12 @@ async def toggle_setting_callback(update: Update, context: ContextTypes.DEFAULT_
 
 # --- Create Group ---
 async def start_create_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "📝 Yangi guruh nomini kiriting:",
-        reply_markup=cancel_keyboard
-    )
+    await update.message.reply_text("📝 Yangi guruh nomini kiriting:", reply_markup=cancel_keyboard)
     return WAIT_GROUP_NAME
 
 async def cancel_group_creation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
-    await update.message.reply_text(
-        "❌ Jarayon bekor qilindi.",
-        reply_markup=main_menu_keyboard()
-    )
+    await update.message.reply_text("❌ Jarayon bekor qilindi.", reply_markup=main_menu_keyboard())
     return ConversationHandler.END
 
 async def save_group_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -137,12 +170,7 @@ async def save_group_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
         group_name = update.message.text.strip()
         user_id = update.effective_user.id
         db.create_group(group_name, user_id)
-
-        await update.message.reply_text(
-            f"✅ **{group_name}** guruhi yaratildi!",
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=main_menu_keyboard()
-        )
+        await update.message.reply_text(f"✅ **{group_name}** guruhi yaratildi!", parse_mode=ParseMode.MARKDOWN, reply_markup=main_menu_keyboard())
     except Exception as e:
         await update.message.reply_text(f"⚠️ Xatolik: `{e}`", reply_markup=main_menu_keyboard())
     return ConversationHandler.END
@@ -157,8 +185,7 @@ async def start_add_lesson(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         "✍️ **Darslarni kiriting:**\n\n"
         "Har bir dars orasiga **`---`** qo'ying.\n"
-        "Format:\n"
-        "`Dars Nomi`\n`Ustoz`\n`Zoom Link (-)`\n`YYYY-MM-DD HH:MM`"
+        "Format:\n`Dars Nomi`\n`Ustoz`\n`Zoom Link (-)`\n`YYYY-MM-DD HH:MM`"
     )
     await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=cancel_keyboard)
     return WAIT_BULK_LESSONS
@@ -183,14 +210,10 @@ async def process_bulk_lessons(update: Update, context: ContextTypes.DEFAULT_TYP
             except ValueError:
                 pass
 
-    await update.message.reply_text(
-        f"✅ Jami **{added_count}** ta dars qo'shildi!",
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=main_menu_keyboard()
-    )
+    await update.message.reply_text(f"✅ Jami **{added_count}** ta dars qo'shildi!", parse_mode=ParseMode.MARKDOWN, reply_markup=main_menu_keyboard())
     return ConversationHandler.END
 
-# --- Display Lessons ---
+# --- Display Lessons WITH ICS BUTTON (TIKLANISHI) ---
 async def show_student_lessons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     groups = db.get_user_subscribed_groups(user.id)
@@ -211,10 +234,37 @@ async def show_student_lessons(update: Update, context: ContextTypes.DEFAULT_TYP
             dt_naive = datetime.strptime(l["start_time"], "%Y-%m-%d %H:%M:%S")
             text += f"**{idx}. {l['title']}**\n👤 Ustoz: {l['teacher']}\n📅 Vaqti: {dt_naive.strftime('%d.%m.%Y %H:%M')}\n\n"
 
-        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📅 Barcha darslarni kalendarga saqlash (.ics)", callback_data=f"download_ics_{g['id']}")]
+        ])
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
 
     if not has_lessons:
         await update.message.reply_text("Yaqin orada rejalashtirilgan darslar yo'q.", reply_markup=main_menu_keyboard())
+
+async def ics_download_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer("⏳ .ics fayli tayyorlanmoqda...")
+
+    try:
+        group_id = int(query.data.split("_")[2])
+        group = db.get_group(group_id)
+        lessons = db.get_upcoming_lessons_for_group(group_id)
+
+        if not lessons:
+            await query.message.reply_text("❌ Ushbu guruhda darslar topilmadi.")
+            return
+
+        ics_file = generate_ics_calendar(group["name"], lessons)
+
+        await query.message.reply_document(
+            document=ics_file,
+            filename=f"{group['name']}_darslar.ics",
+            caption=f"📅 **{group['name']}** guruhining darslar kalendari fayli.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    except Exception as e:
+        await query.message.reply_text(f"⚠️ Faylni yuklashda xatolik: {e}")
 
 # --- Group Management ---
 async def show_managed_groups(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -275,7 +325,7 @@ async def delete_lesson_callback(update: Update, context: ContextTypes.DEFAULT_T
     db.delete_lesson(lid)
     await query.edit_message_text("🗑 Dars o'chirildi.")
 
-# --- GROUP ANNOUNCEMENT (CRASH ISHLAMAYDI) ---
+# --- GROUP ANNOUNCEMENT ---
 async def start_group_announce(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -299,7 +349,6 @@ async def send_group_announce(update: Update, context: ContextTypes.DEFAULT_TYPE
         await msg.reply_text("❌ Guruh topilmadi.", reply_markup=main_menu_keyboard())
         return ConversationHandler.END
 
-    # SQLite dan xavfsiz a'zolarni olish
     with db.get_db() as conn:
         subscribers = conn.execute("SELECT telegram_id FROM subscriptions WHERE group_id = ?", (gid,)).fetchall()
 
@@ -325,7 +374,7 @@ async def send_group_announce(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
     return ConversationHandler.END
 
-# --- SUPER ADMIN PANEL ---
+# --- SUPER ADMIN PANEL (100% ISHLAYDIGAN OBUNACHILAR RO'YXATI) ---
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if user.id != SUPER_ADMIN_ID:
@@ -341,7 +390,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• Faol darslar: **{total_lessons} ta**"
     )
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("👥 Barcha Obunachilar Ro'yxati", callback_data="admin_all_users")],
+        [InlineKeyboardButton("👥 Barcha Obunachilar Ro'yxati", callback_data="get_all_subscribers")],
         [InlineKeyboardButton("📢 Xabar tarqatish", callback_data="admin_broadcast")]
     ])
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
@@ -444,17 +493,22 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("admin", admin_panel))
 
-    # Handlers
+    # Conversation Handlers
     app.add_handler(create_group_conv)
     app.add_handler(add_lesson_conv)
     app.add_handler(group_announce_conv)
     app.add_handler(broadcast_conv)
 
+    # Menyu tugmalari
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_SETTINGS}$"), show_settings))
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_LESSONS}$"), show_student_lessons))
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_MANAGE_GROUPS}$"), show_managed_groups))
 
-    app.add_handler(CallbackQueryHandler(admin_all_users_callback, pattern="^admin_all_users$"))
+    # Aniq patternli Callback'lar (Obunachilar ro'yxati va ICS uchun)
+    app.add_handler(CallbackQueryHandler(admin_all_users_callback, pattern="^get_all_subscribers$"))
+    app.add_handler(CallbackQueryHandler(ics_download_callback, pattern="^download_ics_"))
+    
+    # Qolgan general Callback Query'lar
     app.add_handler(CallbackQueryHandler(toggle_setting_callback, pattern="^toggle_"))
     app.add_handler(CallbackQueryHandler(list_lessons_callback, pattern="^listlessons_"))
     app.add_handler(CallbackQueryHandler(delete_lesson_callback, pattern="^(delete_lesson_|dellesson_)"))
