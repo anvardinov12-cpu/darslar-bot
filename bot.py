@@ -280,22 +280,32 @@ async def show_student_lessons(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def ics_download_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
-    
-    group_id = int(query.data.split("_")[2])
-    group = db.get_group(group_id)
-    lessons = db.get_upcoming_lessons_for_group(group_id)
+    await query.answer("⏳ .ics fayli tayyorlanmoqda...") # O'quvchiga darhol kichik xabar chiqadi
 
-    if not lessons:
-        await query.message.reply_text("Ushbu guruhda darslar topilmadi.")
-        return
+    try:
+        data_parts = query.data.split("_")
+        group_id = int(data_parts[2])
 
-    ics_file = generate_ics_calendar(group["name"], lessons)
-    await query.message.reply_document(
-        document=ics_file,
-        filename=f"{group['name']}_darslar.ics",
-        caption=f"📅 **{group['name']}** darslar fayli.\n\nFaylni ochib, kalendaringizga saqlab oling."
-    )
+        group = db.get_group(group_id)
+        lessons = db.get_upcoming_lessons_for_group(group_id)
+
+        if not lessons:
+            await query.message.reply_text("❌ Ushbu guruhda darslar topilmadi.")
+            return
+
+        # ICS faylini yaratamiz
+        ics_file = generate_ics_calendar(group["name"], lessons)
+
+        # Faylni yuboramiz
+        await query.message.reply_document(
+            document=ics_file,
+            filename=f"{group['name']}_darslar.ics",
+            caption=f"📅 **{group['name']}** guruhining darslar kalendari fayli.\n\nFaylni ochib, kalendaringizga saqlab oling!",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    except Exception as e:
+        print(f"ICS Yuborishda xatolik: {e}")
+        await query.message.reply_text(f"⚠️ Faylni yuklashda xatolik yuz berdi: {e}")
 
 # --- Group Management ---
 async def show_managed_groups(update: Update, context: ContextTypes.DEFAULT_TYPE):
