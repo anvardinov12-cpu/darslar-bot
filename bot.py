@@ -455,8 +455,10 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
     # 🟢 SIZ SO'RAGAN XABAR TARQATISH QISMI SHU YERGA QO'SHILDI:
-    elif query.data == "admin_broadcast":
-        await query.message.reply_text("📢 Xabar tarqatish uchun kuting... /broadcast buyrug'ini yuboring yoki xabaringizni yozing.")
+   elif query.data == "admin_broadcast":
+        # Tugma bosilganda to'g'ridan-to'g'ri xabar tarqatish jarayonini boshlaymiz
+        return await start_broadcast(update, context)
+
 # --- ADMIN BROADCAST (XABAR TARQATISH) ---
 BROADCAST_WAIT_MSG = 100
 
