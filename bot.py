@@ -403,46 +403,36 @@ async def start_group_announce(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def send_group_announce(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
-    gid = context.user_data.get("announce_group_id")
+    gid = context.user_data.get("announce_gid")
     group = db.get_group(gid)
-
-    if not group:
-        await msg.reply_text("❌ Guruh topilmadi.", reply_markup=main_menu_keyboard())
-        return ConversationHandler.END
-
-    with db.get_db() as conn:
-        subscribers = conn.execute("SELECT telegram_id FROM subscriptions WHERE group_id = ?", (gid,)).fetchall()
+    subscribers = db.get_subscribers(gid)
 
     if not subscribers:
-        await msg.reply_text(f"❌ **{group['name']}** guruhida hali hech qanday a'zo yo'q.", reply_markup=main_menu_keyboard())
+        await msg.reply_text("❌ Ushbu guruhda a'zolar topilmadi.")
         return ConversationHandler.END
-
-    await msg.reply_text(f"🚀 **{group['name']}** guruhining {len(subscribers)} ta a'zosiga e'lon yuborilmoqda...")
 
     sent_count = 0
     failed_count = 0
+    
+    # E'lon matni
+    announce_text = f"📢 **E'LON [{group['name']}]**\n\n{msg.text}"
 
-    announce_header = f"📢 **E'LON [{group['name']}]**\n\n"
-
-    for sub in subscribers:
-        u_id = sub["telegram_id"]
+    for uid in subscribers:
         try:
-            if msg.text:
-                await context.bot.send_message(chat_id=u_id, text=announce_header + msg.text, parse_mode=ParseMode.MARKDOWN)
-            else:
-                await context.bot.send_message(chat_id=u_id, text=announce_header, parse_mode=ParseMode.MARKDOWN)
-                await msg.copy(chat_id=u_id)
+            await context.bot.send_message(chat_id=uid, text=announce_text, parse_mode=ParseMode.MARKDOWN)
             sent_count += 1
         except Exception:
             failed_count += 1
 
     await msg.reply_text(
         f"✅ **E'lon yuborildi!**\n\n"
-        f"📥 Yetib bordi: **{sent_count} ta o'quvchiga**\n"
-        f"❌ Yetib bormadi: **{failed_count} ta**",
+        f"📥 Muvaffaqiyatli yetkazildi: **{sent_count}**\n"
+        f"❌ Yetib bormadi: **{failed_count}**",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=main_menu_keyboard()
     )
+    
+    # JARAYONNI MUKAMMAL YAKUNLASH (Bu juda muhim!):
     return ConversationHandler.END
 
 # --- SUPER ADMIN PANEL ---
@@ -621,12 +611,12 @@ def main():
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_LESSONS}$"), show_student_lessons))
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_MANAGE_GROUPS}$"), show_managed_groups))
 
-    # Inline Callback Query Handlers (Qolgan tugmalar)
+  # Callback Query'lar (Tartib muhim!)
+    app.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^admin_"))
     app.add_handler(CallbackQueryHandler(toggle_setting_callback, pattern="^toggle_"))
     app.add_handler(CallbackQueryHandler(ics_download_callback, pattern="^download_ics_"))
     app.add_handler(CallbackQueryHandler(list_lessons_callback, pattern="^listlessons_"))
-    app.add_handler(CallbackQueryHandler(delete_lesson_callback, pattern="^delete_lesson_|dellesson_"))
-    app.add_handler(CallbackQueryHandler(admin_all_users_callback, pattern="^admin_all_users$"))
+    app.add_handler(CallbackQueryHandler(delete_lesson_callback, pattern="^(delete_lesson_|dellesson_)"))
     app.add_handler(CallbackQueryHandler(group_manage_callback, pattern="^(managegroup_|delgroup_)"))
 
     app.run_polling()
