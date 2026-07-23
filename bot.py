@@ -213,7 +213,7 @@ async def process_bulk_lessons(update: Update, context: ContextTypes.DEFAULT_TYP
     await update.message.reply_text(f"✅ Jami **{added_count}** ta dars qo'shildi!", parse_mode=ParseMode.MARKDOWN, reply_markup=main_menu_keyboard())
     return ConversationHandler.END
 
-# --- Display Lessons WITH ICS BUTTON (TIKLANISHI) ---
+# --- Display Lessons ---
 async def show_student_lessons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     groups = db.get_user_subscribed_groups(user.id)
@@ -325,7 +325,7 @@ async def delete_lesson_callback(update: Update, context: ContextTypes.DEFAULT_T
     db.delete_lesson(lid)
     await query.edit_message_text("🗑 Dars o'chirildi.")
 
-# --- GROUP ANNOUNCEMENT ---
+# --- GROUP ANNOUNCEMENT (XATO TUZATILDI) ---
 async def start_group_announce(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -349,8 +349,8 @@ async def send_group_announce(update: Update, context: ContextTypes.DEFAULT_TYPE
         await msg.reply_text("❌ Guruh topilmadi.", reply_markup=main_menu_keyboard())
         return ConversationHandler.END
 
-    with db.get_db() as conn:
-        subscribers = conn.execute("SELECT telegram_id FROM subscriptions WHERE group_id = ?", (gid,)).fetchall()
+    # MANA SHU YERDA BAZANGIZGA MOS TUSHUVCHI FUNKSIYANI ISHLATDIM
+    subscribers = db.get_subscribers(gid)
 
     if not subscribers:
         await msg.reply_text("❌ Ushbu guruhda a'zolar yo'q.", reply_markup=main_menu_keyboard())
@@ -359,8 +359,7 @@ async def send_group_announce(update: Update, context: ContextTypes.DEFAULT_TYPE
     sent_count, failed_count = 0, 0
     announce_text = f"📢 **E'LON [{group['name']}]**\n\n{msg.text}"
 
-    for sub in subscribers:
-        u_id = sub["telegram_id"]
+    for u_id in subscribers:
         try:
             await context.bot.send_message(chat_id=u_id, text=announce_text, parse_mode=ParseMode.MARKDOWN)
             sent_count += 1
@@ -374,7 +373,7 @@ async def send_group_announce(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
     return ConversationHandler.END
 
-# --- SUPER ADMIN PANEL (100% ISHLAYDIGAN OBUNACHILAR RO'YXATI) ---
+# --- SUPER ADMIN PANEL (QOTIB QOLISH TUZATILDI) ---
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if user.id != SUPER_ADMIN_ID:
@@ -397,7 +396,8 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def admin_all_users_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
+    # "Yuklanmoqda..." xabari tugmani tezroq bo'shatadi
+    await query.answer("⏳ Ro'yxat olinmoqda...")
 
     if query.from_user.id != SUPER_ADMIN_ID:
         return
@@ -408,14 +408,11 @@ async def admin_all_users_callback(update: Update, context: ContextTypes.DEFAULT
         return
 
     text = f"👥 **Barcha Bot Obunachilari ({len(user_ids)} ta):**\n\n"
+    
+    # TELEGRAM API LIMITIGA URILMASLIK UCHUN get_chat() OLIB TASHLANDI.
+    # Uning o'rniga foydalanuvchi ustiga bossangiz profiliga o'tadigan link tayyorlandi.
     for idx, uid in enumerate(user_ids, start=1):
-        try:
-            chat = await context.bot.get_chat(uid)
-            full_name = chat.full_name or "Foydalanuvchi"
-            uname = f" (@{chat.username})" if chat.username else ""
-            text += f"{idx}. {full_name}{uname} — `ID: {uid}`\n"
-        except Exception:
-            text += f"{idx}. Telegram Foydalanuvchisi — `ID: {uid}`\n"
+        text += f"{idx}. 👤 [Foydalanuvchi — {uid}](tg://user?id={uid})\n"
 
     if len(text) > 4000:
         for x in range(0, len(text), 4000):
@@ -504,7 +501,7 @@ def main():
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_LESSONS}$"), show_student_lessons))
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_MANAGE_GROUPS}$"), show_managed_groups))
 
-    # Aniq patternli Callback'lar (Obunachilar ro'yxati va ICS uchun)
+    # Aniq patternli Callback'lar
     app.add_handler(CallbackQueryHandler(admin_all_users_callback, pattern="^get_all_subscribers$"))
     app.add_handler(CallbackQueryHandler(ics_download_callback, pattern="^download_ics_"))
     
