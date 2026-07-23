@@ -51,13 +51,15 @@ def generate_ics_calendar(group_name: str, lessons: list) -> io.BytesIO:
 
     for l in lessons:
         dt_naive = datetime.strptime(l["start_time"], "%Y-%m-%d %H:%M:%S")
+        # Tashkent (UTC+5) vaqtini UTC ga o'tkazamiz
         dt_utc = dt_naive - timedelta(hours=5)
         dt_start_str = dt_utc.strftime("%Y%m%dT%H%M%SZ")
         dt_end_str = (dt_utc + timedelta(hours=1, minutes=30)).strftime("%Y%m%dT%H%M%SZ")
 
         summary = l["title"]
         description = f"Ustoz: {l['teacher']}"
-        location = l.get("meeting_link", "") or ""
+        # sqlite3.Row uchun xatosiz kalit olish:
+        location = l["meeting_link"] if l["meeting_link"] else ""
 
         ics_content.extend([
             "BEGIN:VEVENT",
@@ -82,7 +84,6 @@ def generate_ics_calendar(group_name: str, lessons: list) -> io.BytesIO:
     bio = io.BytesIO(file_bytes)
     bio.name = f"{group_name}_darslar.ics"
     return bio
-
 # --- Keyboards ---
 def main_menu_keyboard():
     keyboard = [
