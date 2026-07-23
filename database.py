@@ -46,6 +46,13 @@ def init_db():
                 PRIMARY KEY (user_id, group_id)
             )
         """)
+        # Foydalanuvchilarning ismini saqlash uchun jadval
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                user_id INTEGER PRIMARY KEY,
+                full_name TEXT
+            )
+        """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS user_settings (
                 user_id INTEGER PRIMARY KEY,
@@ -114,17 +121,27 @@ def delete_group(group_id: int):
         conn.execute("DELETE FROM subscribers WHERE group_id = ?", (group_id,))
         conn.execute("DELETE FROM lessons WHERE group_id = ?", (group_id,))
 
-# --- Subscribers ---
-def add_subscriber(user_id: int, group_id: int):
+# --- Subscribers & Users ---
+def add_subscriber(user_id: int, group_id: int, full_name: str = ""):
     with get_db() as conn:
         if group_id != 0:
             conn.execute("INSERT OR IGNORE INTO subscribers (user_id, group_id) VALUES (?, ?)", (user_id, group_id))
         conn.execute("INSERT OR IGNORE INTO user_settings (user_id) VALUES (?)", (user_id,))
+        if full_name:
+            conn.execute("""
+                INSERT INTO users (user_id, full_name) VALUES (?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET full_name = ?
+            """, (user_id, full_name, full_name))
 
 def get_subscribers(group_id: int):
     with get_db() as conn:
-        rows = conn.execute("SELECT user_id FROM subscribers WHERE group_id = ?", (group_id,)).fetchall()
-        return [r["user_id"] for r in rows]
+        rows = conn.execute("""
+            SELECT s.user_id, COALESCE(u.full_name, 'Foydalanuvchi') as full_name 
+            FROM subscribers s
+            LEFT JOIN users u ON s.user_id = u.user_id
+            WHERE s.group_id = ?
+        """, (group_id,)).fetchall()
+        return [dict(r) for r in rows]
 
 # --- User Notification Settings ---
 def get_user_settings(user_id: int):
@@ -193,12 +210,18 @@ def get_total_stats():
 
 def get_all_users_list():
     with get_db() as conn:
-        rows = conn.execute("SELECT DISTINCT user_id FROM subscribers").fetchall()
-        return [r["user_id"] for r in rows if r["user_id"] != 0]
+        rows = conn.execute("""
+            SELECT DISTINCT s.user_id, COALESCE(u.full_name, 'Foydalanuvchi') as full_name 
+            FROM subscribers s
+            LEFT JOIN users u ON s.user_id = u.user_id
+            WHERE s.user_id != 0
+        """).fetchall()
+        return [dict(r) for r in rows]
 
 # --- Ban / Kick User ---
 def delete_user_from_bot(user_id: int):
     with get_db() as conn:
         conn.execute("DELETE FROM subscribers WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM user_settings WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM sent_reminders WHERE user_id = ?", (user_id,))
