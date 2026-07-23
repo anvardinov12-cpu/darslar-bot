@@ -7,9 +7,6 @@ import pytz
 DB_PATH = "modern_bot.db"
 TZ = pytz.timezone("Asia/Tashkent")
 
-# Sukut bo'yicha (default) barcha eslatma turlari
-DEFAULT_REMINDERS = ["24h", "12h", "6h", "1h", "15m", "now"]
-
 def get_now():
     return datetime.now(TZ)
 
@@ -111,7 +108,8 @@ def delete_group(group_id: int):
 # --- Subscribers ---
 def add_subscriber(user_id: int, group_id: int):
     with get_db() as conn:
-        conn.execute("INSERT OR IGNORE INTO subscribers (user_id, group_id) VALUES (?, ?)", (user_id, group_id))
+        if group_id != 0:
+            conn.execute("INSERT OR IGNORE INTO subscribers (user_id, group_id) VALUES (?, ?)", (user_id, group_id))
         conn.execute("INSERT OR IGNORE INTO user_settings (user_id) VALUES (?)", (user_id,))
 
 def get_subscribers(group_id: int):
@@ -176,6 +174,7 @@ def mark_reminder_sent(lesson_id: int, user_id: int, r_type: str):
     with get_db() as conn:
         conn.execute("INSERT OR IGNORE INTO sent_reminders (lesson_id, user_id, reminder_type) VALUES (?, ?, ?)", (lesson_id, user_id, r_type))
 
+# --- Super Admin Stats ---
 def get_total_stats():
     with get_db() as conn:
         total_users = conn.execute("SELECT COUNT(DISTINCT user_id) FROM subscribers").fetchone()[0]
