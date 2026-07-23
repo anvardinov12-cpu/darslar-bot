@@ -419,7 +419,10 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• Jami guruhlar: **{total_groups} ta**\n"
         f"• Faol darslar: **{total_lessons} ta**"
     )
-    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("👥 Barcha Obunachilar Ro'yxati", callback_data="admin_all_users")]])
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("👥 Barcha Obunachilar Ro'yxati", callback_data="admin_users")],
+        [InlineKeyboardButton("📢 Xabar tarqatish", callback_data="admin_broadcast")]
+    ])
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
 
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -451,6 +454,9 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         else:
             await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
+    # 🟢 SIZ SO'RAGAN XABAR TARQATISH QISMI SHU YERGA QO'SHILDI:
+    elif query.data == "admin_broadcast":
+        await query.message.reply_text("📢 Xabar tarqatish uchun kuting... /broadcast buyrug'ini yuboring yoki xabaringizni yozing.")
 # --- ADMIN BROADCAST (XABAR TARQATISH) ---
 BROADCAST_WAIT_MSG = 100
 
