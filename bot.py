@@ -345,48 +345,25 @@ async def show_user_subscriptions(update: Update, context: ContextTypes.DEFAULT_
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def unsubscribe_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Terminalga yozamiz
+    print("--------------------------------------------------")
+    print(">>> UNSUBSCRIBE FUNKSIYASIGA KIRDI! <<<")
+    print("--------------------------------------------------")
+    
     query = update.callback_query
     
-    # 1. Tugma aylanishini darhol to'xtatish (Eng muhimi!)
+    # Telegramga darhol javob beramiz
     try:
-        await query.answer("Bajarildi!")
-    except Exception:
-        pass
-    
-    try:
-        data_parts = query.data.split("_")
-        if len(data_parts) < 2:
-            return
-            
-        gid = int(data_parts[1])
-        user_id = query.from_user.id
-        
-        # Bazadan o'chiramiz
-        db.remove_subscriber(user_id, gid)
-        
-        # Qolgan obunalarni olamiz
-        groups = db.get_user_subscribed_groups(user_id)
-        if not groups:
-            await query.edit_message_text("✅ Obuna bekor qilindi.\n\nSizda hozircha faol obunalar yo'q.")
-            return
-
-        # Yangi tugmalarni yasaymiz
-        keyboard = []
-        for g in groups:
-            keyboard.append([InlineKeyboardButton(f"❌ {g['name']} - Obunani bekor qilish", callback_data=f"unsub_{g['id']}")])
-
-        await query.edit_message_text(
-            "📋 **Sizning obunalaringiz:**\n\nQuyidagi guruhlardan birortasining eslatmalarini to'xtatish uchun obunani bekor qilishingiz mumkin:",
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+        await query.answer("Tekshirildi!", show_alert=True)
     except Exception as e:
-        print(f"Xatolik: {e}")
-        try:
-            await query.message.reply_text("✅ Obuna bekor qilindi.")
-        except Exception:
-            pass
-            
+        print(f"Answer xatosi: {e}")
+        
+    # Telegram chatning o'ziga ham xabar yozamiz
+    try:
+        await query.message.reply_text("✅ Mana, funksiya ishlayapti va chatga yozdi!")
+    except Exception as e:
+        print(f"Message xatosi: {e}")
+        
 async def ics_download_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer("⏳ .ics fayli tayyorlanmoqda...")
