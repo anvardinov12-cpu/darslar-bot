@@ -347,8 +347,11 @@ async def show_user_subscriptions(update: Update, context: ContextTypes.DEFAULT_
 async def unsubscribe_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     
-    # Telegramga darhol signal beramiz (aylanishni to'xtatish uchun shart)
-    await query.answer("Obuna bekor qilindi!", show_alert=False)
+    # 1. So'rov eskirgan bo'lsa ham aylanishni to'xtatishga harakat qilamiz
+    try:
+        await query.answer("Obuna bekor qilindi!")
+    except Exception:
+        pass  # Agar so'rov eskirgan bo'lsa, xatolikni yutib yuboramiz
     
     try:
         data_parts = query.data.split("_")
@@ -364,7 +367,10 @@ async def unsubscribe_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         # Qolgan obunalarni tekshiramiz
         groups = db.get_user_subscribed_groups(user_id)
         if not groups:
-            await query.edit_message_text("✅ Obuna bekor qilindi.\n\nSizda hozircha faol obunalar yo'q.")
+            try:
+                await query.edit_message_text("✅ Obuna bekor qilindi.\n\nSizda hozircha faol obunalar yo'q.")
+            except Exception:
+                await query.message.reply_text("✅ Obuna bekor qilindi.\n\nSizda hozircha faol obunalar yo'q.")
             return
 
         # Yangi tugmalar ro'yxatini yasaymiz
@@ -372,14 +378,20 @@ async def unsubscribe_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         for g in groups:
             keyboard.append([InlineKeyboardButton(f"❌ {g['name']} - Obunani bekor qilish", callback_data=f"unsub_{g['id']}")])
 
-        await query.edit_message_text(
-            "📋 **Sizning obunalaringiz:**\n\nQuyidagi guruhlardan birortasining eslatmalarini to'xtatish uchun obunani bekor qilishingiz mumkin:",
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+        text = "📋 **Sizning obunalaringiz:**\n\nQuyidagi guruhlardan birortasining eslatmalarini to'xtatish uchun obunani bekor qilishingiz mumkin:"
+        
+        try:
+            await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(keyboard))
+        except Exception:
+            # Agar xabarni tahrirlash imkoni bo'lmasa, yangi xabar yuboramiz
+            await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(keyboard))
+            
     except Exception as e:
-        print(f"Xatolik chiqdi: {e}")
-        await query.message.reply_text(f"⚠️ Xatolik yuz berdi: {e}")
+        print(f"Unsubscribe xatoligi: {e}")
+        try:
+            await query.message.reply_text(f"⚠️ Xatolik yuz berdi: {e}")
+        except Exception:
+            pass
 
 async def ics_download_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
