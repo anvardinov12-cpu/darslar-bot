@@ -46,12 +46,16 @@ def init_db():
                 PRIMARY KEY (user_id, group_id)
             )
         """)
-        # Foydalanuvchilarning ismini saqlash uchun jadval
         conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id INTEGER PRIMARY KEY,
                 full_name TEXT
             )
+        """)
+        # Bazada oldindan bor bo'lgan foydalanuvchilarni ham xatolik bermasligi uchun qo'shib qo'yamiz
+        conn.execute("""
+            INSERT OR IGNORE INTO users (user_id, full_name)
+            SELECT DISTINCT user_id, 'Foydalanuvchi' FROM subscribers WHERE user_id != 0
         """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS user_settings (
