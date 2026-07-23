@@ -363,6 +363,11 @@ async def unsubscribe_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.message.reply_text("✅ Mana, funksiya ishlayapti va chatga yozdi!")
     except Exception as e:
         print(f"Message xatosi: {e}")
+
+async def catch_all_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    print(f"DIQQAT! Tugma bosildi, kelgan data: '{query.data}'")
+    await query.answer(f"Bosildi: {query.data}", show_alert=True)
         
 async def ics_download_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -673,6 +678,7 @@ def main():
     app.add_handler(CallbackQueryHandler(admin_all_users_callback, pattern="^get_all_subscribers$"))
     app.add_handler(CallbackQueryHandler(ics_download_callback, pattern="^download_ics_"))
     app.add_handler(CallbackQueryHandler(group_members_callback, pattern="^groupmembers_"))
+    app.add_handler(CallbackQueryHandler(unsubscribe_callback, pattern="^unsub_")) # <-- Obunani bekor qiluvchi handler shu yerda
     
     # Qolgan general Callback Query'lar
     app.add_handler(CallbackQueryHandler(toggle_setting_callback, pattern="^toggle_"))
