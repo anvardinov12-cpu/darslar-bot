@@ -492,6 +492,8 @@ async def send_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Main App ---
 def main():
+    db.init_db()  # <-- MANA SHU QATORNI QO'SHISH SHART!
+    
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     create_group_conv = ConversationHandler(
