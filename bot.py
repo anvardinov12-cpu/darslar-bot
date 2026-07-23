@@ -454,10 +454,9 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         else:
             await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
-    # 🟢 SIZ SO'RAGAN XABAR TARQATISH QISMI SHU YERGA QO'SHILDI:
-   elif query.data == "admin_broadcast":
-        # Tugma bosilganda to'g'ridan-to'g'ri xabar tarqatish jarayonini boshlaymiz
+    elif query.data == "admin_broadcast":
         return await start_broadcast(update, context)
+
 
 # --- ADMIN BROADCAST (XABAR TARQATISH) ---
 BROADCAST_WAIT_MSG = 100
@@ -465,16 +464,26 @@ BROADCAST_WAIT_MSG = 100
 async def start_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != SUPER_ADMIN_ID:
-        await update.message.reply_text("⛔️ Bu buyruq faqat super admin uchun!")
+        if update.message:
+            await update.message.reply_text("⛔️ Bu buyruq faqat super admin uchun!")
+        elif update.callback_query:
+            await update.callback_query.message.reply_text("⛔️ Bu buyruq faqat super admin uchun!")
         return ConversationHandler.END
 
-    await update.message.reply_text(
+    msg_text = (
         "📢 **Barcha foydalanuvchilarga xabar tarqatish**\n\n"
         "Yubormoqchi bo'lgan xabaringizni (matn, rasm, video va h.k.) kiriting.\n"
-        "Bekor qilish uchun /cancel buyrug'ini yuboring.",
-        parse_mode=ParseMode.MARKDOWN
+        "Bekor qilish uchun /cancel buyrug'ini yuboring."
     )
+
+    # Tugma yoki buyruq orqali kelganiga qarab xabar yuborish:
+    if update.callback_query:
+        await update.callback_query.message.reply_text(msg_text, parse_mode=ParseMode.MARKDOWN)
+    elif update.message:
+        await update.message.reply_text(msg_text, parse_mode=ParseMode.MARKDOWN)
+
     return BROADCAST_WAIT_MSG
+
 
 async def send_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
@@ -506,6 +515,7 @@ async def send_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode=ParseMode.MARKDOWN
     )
     return ConversationHandler.END
+
 
 async def cancel_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("❌ Xabar tarqatish bekor qilindi.")
@@ -597,29 +607,30 @@ def main():
         ]
     )
 
-    broadcast_conv = ConversationHandler(
-    entry_points=[
-        CommandHandler("broadcast", start_broadcast),
-        MessageHandler(filters.Regex("^📢 Xabar tarqatish$"), start_broadcast)
-    ],
-    states={
-        BROADCAST_WAIT_MSG: [
-            MessageHandler(filters.ALL & ~filters.COMMAND, send_broadcast)
-        ]
-    },
-    fallbacks=[CommandHandler("cancel", cancel_broadcast)]
-)
-    
+broadcast_conv = ConversationHandler(
+        entry_points=[
+            CommandHandler("broadcast", start_broadcast),
+            MessageHandler(filters.Regex("^📢 Xabar tarqatish$"), start_broadcast),
+            CallbackQueryHandler(admin_callback_handler, pattern="^admin_broadcast$")
+        ],
+        states={
+            BROADCAST_WAIT_MSG: [
+                MessageHandler(filters.ALL & ~filters.COMMAND, send_broadcast)
+            ]
+        },
+        fallbacks=[CommandHandler("cancel", cancel_broadcast)]
+    )
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("admin", admin_panel))
 
     app.add_handler(create_group_conv)
     app.add_handler(add_lesson_conv)
     app.add_handler(broadcast_conv)
-    
+
     app.add_handler(MessageHandler(filters.Regex("^⚙️ Eslatma Sozlamalari$"), show_settings))
     app.add_handler(MessageHandler(filters.Regex("^📚 Mening Darslarim$"), show_student_lessons))
-    app.add_handler(MessageHandler(filters.Regex("^📂 Guruhlarimni Boshqarish$"), show_managed_groups))
+    app.add_handler(MessageHandler(filters.Regex("^📁 Guruhlarimni Boshqarish$"), show_managed_groups))
 
     app.add_handler(CallbackQueryHandler(toggle_setting_callback, pattern="^toggle_"))
     app.add_handler(CallbackQueryHandler(ics_download_callback, pattern="^download_ics_"))
