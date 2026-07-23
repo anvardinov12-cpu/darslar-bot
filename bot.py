@@ -573,45 +573,15 @@ async def check_and_send_reminders(context: ContextTypes.DEFAULT_TYPE):
 
 # --- Main App ---
 def main():
-    if not BOT_TOKEN:
-        raise SystemExit("BOT_TOKEN mavjud emas!")
+    # Application yaratish (Bu yerda o'zingizning haqiqiy bot tokeningiz tursin)
+    app = ApplicationBuilder().token("BOT_TOKENINGIZ").build()
 
-    db.init_db()
-    app = Application.builder().token(BOT_TOKEN).build()
-
-    create_group_conv = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex("^➕ Yangi Guruh Yaratish$"), start_create_group)],
-        states={
-            WAIT_GROUP_NAME: [
-                MessageHandler(filters.Regex("^⬅️ Orqaga$"), cancel_group_creation),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, save_group_name)
-            ]
-        },
-        fallbacks=[
-            CommandHandler("cancel", cancel_group_creation),
-            MessageHandler(filters.Regex("^⬅️ Orqaga$"), cancel_group_creation)
-        ]
-    )
-
-    add_lesson_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(start_add_lesson, pattern="^addlesson_")],
-        states={
-            WAIT_BULK_LESSONS: [
-                MessageHandler(filters.Regex("^⬅️ Orqaga$"), cancel_group_creation),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, process_bulk_lessons)
-            ]
-        },
-        fallbacks=[
-            CommandHandler("cancel", cancel_group_creation),
-            MessageHandler(filters.Regex("^⬅️ Orqaga$"), cancel_group_creation)
-        ]
-    )
-
-broadcast_conv = ConversationHandler(
+    # 1. Broadcaster Conversation Handler
+    broadcast_conv = ConversationHandler(
         entry_points=[
             CommandHandler("broadcast", start_broadcast),
             MessageHandler(filters.Regex("^📢 Xabar tarqatish$"), start_broadcast),
-            CallbackQueryHandler(admin_callback_handler, pattern="^admin_broadcast$")
+            CallbackQueryHandler(start_broadcast, pattern="^admin_broadcast$")
         ],
         states={
             BROADCAST_WAIT_MSG: [
@@ -622,31 +592,29 @@ broadcast_conv = ConversationHandler(
         per_message=False
     )
 
+    # 2. Buyruqlar (CommandHandler)
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("admin", admin_panel))
 
+    # 3. Muloqot zanjirlari (ConversationHandlers)
     app.add_handler(create_group_conv)
     app.add_handler(add_lesson_conv)
     app.add_handler(broadcast_conv)
 
+    # 4. Asosiy Menyu Tugmalari (MessageHandler)
     app.add_handler(MessageHandler(filters.Regex("^⚙️ Eslatma Sozlamalari$"), show_settings))
     app.add_handler(MessageHandler(filters.Regex("^📚 Mening Darslarim$"), show_student_lessons))
     app.add_handler(MessageHandler(filters.Regex("^📁 Guruhlarimni Boshqarish$"), show_managed_groups))
 
-    app.add_handler(CallbackQueryHandler(admin_callback_handler))
-
+    # 5. Inline Tugmalar (CallbackQueryHandlers - Rasmingizdagidek to'liq 4 ta)
     app.add_handler(CallbackQueryHandler(toggle_setting_callback, pattern="^toggle_"))
     app.add_handler(CallbackQueryHandler(ics_download_callback, pattern="^download_ics_"))
     app.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^admin_"))
-    app.add_handler(CallbackQueryHandler(group_manage_callback, pattern="^(managegroup_|delgroup_)"))
-    app.add_handler(CallbackQueryHandler(list_lessons_callback, pattern="^listlessons_"))
-    app.add_handler(CallbackQueryHandler(delete_lesson_callback, pattern="^dellesson_"))
-    app.add_handler(MessageHandler(~filters.TEXT & ~filters.COMMAND, block_media_handler))
+    app.add_handler(CallbackQueryHandler(group_manage_callback, pattern="^(managegroup_|delgroup_|listlesson_|dellesson_)"))
 
-    app.job_queue.run_repeating(check_and_send_reminders, interval=60, first=10)
-
+    # Botni ishga tushirish
     app.run_polling()
-    
+
 if __name__ == "__main__":
     main()
     
