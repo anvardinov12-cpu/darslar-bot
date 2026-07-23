@@ -187,8 +187,8 @@ async def save_group_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
         group_name = update.message.text.strip()
         user_id = update.effective_user.id
 
-        # Ma'lumotlar bazasiga saqlaymiz
-        db.add_group(user_id, group_name)
+        # db.add_group EMAS, db.create_group deb yoziladi:
+        db.create_group(group_name, user_id)
 
         main_menu = ReplyKeyboardMarkup([
             ["📚 Mening Darslarim", "⚙️ Eslatma Sozlamalari"],
