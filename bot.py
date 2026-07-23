@@ -401,3 +401,60 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# --- SUPER ADMIN CONFIG ---
+SUPER_ADMIN_ID = 355784505  # <--- BU YERGA O'ZINGIZNING TELEGRAM ID'INGIZNI YOZING!
+
+# --- SUPER ADMIN PANEL ---
+async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    if user.id != SUPER_ADMIN_ID:
+        await update.message.reply_text("⛔️ Ushbu bo'lim faqat Bosh Admin uchun mo'ljallangan!")
+        return
+
+    total_users, total_groups, total_lessons = db.get_total_stats()
+
+    text = (
+        "👑 **SUPER ADMIN PANEL**\n\n"
+        f"📊 **Statistika:**\n"
+        f"• Barcha obunachilar: **{total_users} ta**\n"
+        f"• Jami guruhlar: **{total_groups} ta**\n"
+        f"• Faol darslar: **{total_lessons} ta**"
+    )
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("👥 Barcha Obunachilar Ro'yxati", callback_data="admin_all_users")],
+        [InlineKeyboardButton("📢 Barchaga Xabar Yuborish", callback_data="admin_broadcast")]
+    ])
+
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+
+async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    if query.from_user.id != SUPER_ADMIN_ID:
+        return
+
+    if query.data == "admin_all_users":
+        user_ids = db.get_all_users_list()
+        if not user_ids:
+            await query.message.reply_text("Hali hech kim botga obuna bo'lmagan.")
+            return
+
+        text = f"👥 **Barcha Bot Obunachilari ({len(user_ids)} ta):**\n\n"
+        for idx, uid in enumerate(user_ids, start=1):
+            try:
+                chat = await context.bot.get_chat(uid)
+                full_name = chat.full_name or "Foydalanuvchi"
+                uname = f" (@{chat.username})" if chat.username else ""
+                text += f"{idx}. {full_name}{uname} — `ID: {uid}`\n"
+            except Exception:
+                text += f"{idx}. ID: `{uid}` (Profil ma'lumotlari berkitilgan)\n"
+
+        # Telegram xabarlar uzunligi cheklovi sabab bo'laklab yuboramiz
+        if len(text) > 4000:
+            for x in range(0, len(text), 4000):
+                await query.message.reply_text(text[x:x+4000], parse_mode=ParseMode.MARKDOWN)
+        else:
+            await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
