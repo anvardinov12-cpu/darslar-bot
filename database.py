@@ -1,10 +1,14 @@
+import os
 import sqlite3
 import secrets
 from contextlib import contextmanager
 from datetime import datetime
 import pytz
 
-DB_PATH = "modern_bot.db"
+# Railway Volume papkasi mavjud bo'lsa, shu yerga, aks holda joriy papkaga saqlaydi
+DB_DIR = "/app/data" if os.path.exists("/app/data") else "."
+DB_PATH = os.path.join(DB_DIR, "modern_bot.db")
+
 TZ = pytz.timezone("Asia/Tashkent")
 
 def get_now():
@@ -19,6 +23,11 @@ def get_db():
         conn.commit()
     finally:
         conn.close()
+
+def get_connection():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 def init_db():
     with get_db() as conn:
