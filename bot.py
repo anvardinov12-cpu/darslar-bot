@@ -618,7 +618,8 @@ broadcast_conv = ConversationHandler(
                 MessageHandler(filters.ALL & ~filters.COMMAND, send_broadcast)
             ]
         },
-        fallbacks=[CommandHandler("cancel", cancel_broadcast)]
+        fallbacks=[CommandHandler("cancel", cancel_broadcast)],
+        per_message=False
     )
 
     app.add_handler(CommandHandler("start", start))
@@ -631,6 +632,8 @@ broadcast_conv = ConversationHandler(
     app.add_handler(MessageHandler(filters.Regex("^⚙️ Eslatma Sozlamalari$"), show_settings))
     app.add_handler(MessageHandler(filters.Regex("^📚 Mening Darslarim$"), show_student_lessons))
     app.add_handler(MessageHandler(filters.Regex("^📁 Guruhlarimni Boshqarish$"), show_managed_groups))
+
+    app.add_handler(CallbackQueryHandler(admin_callback_handler))
 
     app.add_handler(CallbackQueryHandler(toggle_setting_callback, pattern="^toggle_"))
     app.add_handler(CallbackQueryHandler(ics_download_callback, pattern="^download_ics_"))
