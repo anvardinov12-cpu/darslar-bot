@@ -155,27 +155,51 @@ async def toggle_setting_callback(update: Update, context: ContextTypes.DEFAULT_
     await show_settings(update, context)
 
 # --- Create Group ---
+cancel_keyboard = ReplyKeyboardMarkup([["⬅️ Orqaga"]], resize_keyboard=True)
+
 async def start_create_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📝 *Yangi guruh nomini kiriting:*\n\nMasalan: `Frontend React 12-guruh`", parse_mode=ParseMode.MARKDOWN)
+    """Guruh yaratish jarayonini boshlash"""
+    await update.message.reply_text(
+        "📝 Yangi guruh nomini kiriting:\n\n"
+        "(Bekor qilish uchun '⬅️ Orqaga' tugmasini bosing)",
+        reply_markup=cancel_keyboard
+    )
     return WAIT_GROUP_NAME
 
-async def save_group_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    name = update.message.text.strip()
-    group = db.create_group(name, user.id)
-    bot = await context.bot.get_me()
-    invite_link = f"https://t.me/{bot.username}?start=g_{group['invite_code']}"
+async def cancel_group_creation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Jarayonni bekor qilish va asosiy menyuga qaytarish"""
+    context.user_data.clear()
+    
+    main_menu = ReplyKeyboardMarkup([
+        ["📚 Mening Darslarim", "⚙️ Eslatma Sozlamalari"],
+        ["➕ Yangi Guruh Yaratish", "📂 Guruhlarimni Boshqarish"]
+    ], resize_keyboard=True)
 
-    text = (
-        f"✅ **Guruh Yaratildi!**\n\n"
-        f"📌 **Nomi:** {group['name']}\n"
-        f"🔗 **A'zolik havolasi:**\n`{invite_link}`\n\n"
-        f"Ushbu havolani o'quvchilaringizga yuboring."
+    await update.message.reply_text(
+        "❌ Jarayon bekor qilindi.",
+        reply_markup=main_menu
     )
-    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("➕ Dars Qo'shish", callback_data=f"addlesson_{group['id']}")]])
-    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
     return ConversationHandler.END
 
+async def save_group_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Guruh nomini saqlash"""
+    group_name = update.message.text.strip()
+    user_id = update.effective_user.id
+
+    db.add_group(user_id, group_name)
+
+    main_menu = ReplyKeyboardMarkup([
+        ["📚 Mening Darslarim", "⚙️ Eslatma Sozlamalari"],
+        ["➕ Yangi Guruh Yaratish", "📂 Guruhlarimni Boshqarish"]
+    ], resize_keyboard=True)
+
+    await update.message.reply_text(
+        f"✅ **{group_name}** guruh muvaffaqiyatli yaratildi!",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=main_menu
+    )
+    return ConversationHandler.END
+    
 # --- Bulk Add Lessons (1 Oylik / 20 ta Darsni Bittada Qo'shish) ---
 async def start_add_lesson(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -473,14 +497,30 @@ def main():
 
     create_group_conv = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^➕ Yangi Guruh Yaratish$"), start_create_group)],
-        states={WAIT_GROUP_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_group_name)]},
-        fallbacks=[]
+        states={
+            WAIT_GROUP_NAME: [
+                MessageHandler(filters.Regex("^⬅️ Orqaga$"), cancel_group_creation),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, save_group_name)
+            ]
+        },
+        fallbacks=[
+            CommandHandler("cancel", cancel_group_creation),
+            MessageHandler(filters.Regex("^⬅️ Orqaga$"), cancel_group_creation)
+        ]
     )
 
     add_lesson_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(start_add_lesson, pattern="^addlesson_")],
-        states={WAIT_BULK_LESSONS: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_bulk_lessons)]},
-        fallbacks=[]
+        states={
+            WAIT_BULK_LESSONS: [
+                MessageHandler(filters.Regex("^⬅️ Orqaga$"), cancel_group_creation),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, process_bulk_lessons)
+            ]
+        },
+        fallbacks=[
+            CommandHandler("cancel", cancel_group_creation),
+            MessageHandler(filters.Regex("^⬅️ Orqaga$"), cancel_group_creation)
+        ]
     )
 
     app.add_handler(CommandHandler("start", start))
@@ -503,6 +543,6 @@ def main():
     app.job_queue.run_repeating(check_and_send_reminders, interval=60, first=10)
 
     app.run_polling()
-
+    
 if __name__ == "__main__":
     main()
