@@ -39,6 +39,62 @@ WAIT_BULK_LESSONS = 2
 BROADCAST_WAIT_MSG = 100
 GROUP_ANNOUNCE_WAIT_MSG = 101
 
+
+# --- Background Reminder Checker ---
+async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
+    now = datetime.now(TZ)
+    lessons = db.get_all_future_lessons()
+    
+    for l in lessons:
+        lesson_id = l["id"]
+        group_id = l["group_id"]
+        group = db.get_group(group_id)
+        if not group:
+            continue
+            
+        dt_naive = datetime.strptime(l["start_time"], "%Y-%m-%d %H:%M:%S")
+        dt_lesson = TZ.localize(dt_naive)
+        
+        diff_minutes = (dt_lesson - now).total_seconds() / 60.0
+        subscribers = db.get_subscribers(group_id)
+        
+        for sub in subscribers:
+            user_id = sub["user_id"]
+            if user_id == 0:
+                continue
+            settings = db.get_user_settings(user_id)
+            
+            async def send_if_needed(r_type, text_prefix):
+                if not db.was_reminder_sent(lesson_id, user_id, r_type):
+                    try:
+                        link_text = f"🔗 **Havola:** {l['meeting_link']}\n" if l['meeting_link'] else ""
+                        msg = (
+                            f"🔔 **DARS ESLATMASI!**\n\n"
+                            f"📚 Guruh: **{group['name']}**\n"
+                            f"📖 Dars: **{l['title']}**\n"
+                            f"👤 Ustoz: {l['teacher']}\n"
+                            f"📅 Vaqti: {dt_naive.strftime('%d.%m.%Y %H:%M')}\n"
+                            f"{link_text}\n"
+                            f"*{text_prefix}*"
+                        )
+                        await context.bot.send_message(chat_id=user_id, text=msg, parse_mode=ParseMode.MARKDOWN)
+                        db.mark_reminder_sent(lesson_id, user_id, r_type)
+                    except Exception as e:
+                        logging.error(f"Xabar yuborishda xatolik ({user_id}): {e}")
+
+            if settings.get("rem_24h", 1) == 1 and 1435 <= diff_minutes <= 1445:
+                await send_if_needed("24h", "Darsga 24 soat qoldi!")
+            elif settings.get("rem_12h", 1) == 1 and 715 <= diff_minutes <= 725:
+                await send_if_needed("12h", "Darsga 12 soat qoldi!")
+            elif settings.get("rem_6h", 1) == 1 and 355 <= diff_minutes <= 365:
+                await send_if_needed("6h", "Darsga 6 soat qoldi!")
+            elif settings.get("rem_1h", 1) == 1 and 55 <= diff_minutes <= 65:
+                await send_if_needed("1h", "Darsga 1 soat qoldi!")
+            elif settings.get("rem_15m", 1) == 1 and 12 <= diff_minutes <= 18:
+                await send_if_needed("15m", "Darsga 15 daqiqa qoldi!")
+            elif settings.get("rem_now", 1) == 1 and -2 <= diff_minutes <= 3:
+                await send_if_needed("now", "🔴 Dars boshlandi!")
+                
 # --- ICS Calendar Generator ---
 def generate_ics_calendar(group_name: str, lessons: list) -> io.BytesIO:
     ics_content = [
@@ -496,6 +552,8 @@ def main():
     
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
+    app.job_queue.run_repeating(check_reminders, interval=60, first=5)
+    
     create_group_conv = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex(f"^{BTN_CREATE_GROUP}$"), start_create_group)],
         states={WAIT_GROUP_NAME: [MessageHandler(filters.TEXT & ~filters.Regex(f"^{BTN_BACK}$"), save_group_name)]},
