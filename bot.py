@@ -37,6 +37,7 @@ logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s
 WAIT_GROUP_NAME = 1
 WAIT_BULK_LESSONS = 2
 BROADCAST_WAIT_MSG = 100
+GROUP_ANNOUNCE_WAIT_MSG = 101
 
 # --- ICS Calendar Generator ---
 def generate_ics_calendar(group_name: str, lessons: list) -> io.BytesIO:
@@ -348,6 +349,7 @@ async def group_manage_callback(update: Update, context: ContextTypes.DEFAULT_TY
         text = f"📌 **Guruh:** {group['name']}\n🔗 **A'zolik havolasi:** `{invite_link}`"
         btns = [
             [InlineKeyboardButton("➕ Dars Qo'shish", callback_data=f"addlesson_{gid}")],
+            [InlineKeyboardButton("📢 Guruhga E'lon Yuborish", callback_data=f"announcegroup_{gid}")],
             [InlineKeyboardButton("📋 Darslar Ro'yxati / O'chirish", callback_data=f"listlessons_{gid}")],
             [InlineKeyboardButton("🗑 Guruhni O'chirish", callback_data=f"delgroup_{gid}")]
         ]
@@ -380,6 +382,68 @@ async def delete_lesson_callback(update: Update, context: ContextTypes.DEFAULT_T
     lid = int(query.data.split("_")[1])
     db.delete_lesson(lid)
     await query.edit_message_text("🗑 Dars o'chirildi.")
+
+# --- GROUP ANNOUNCEMENT (Guruhga E'lon yuborish) ---
+async def start_group_announce(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    gid = int(query.data.split("_")[1])
+    context.user_data["announce_group_id"] = gid
+
+    group = db.get_group(gid)
+
+    await query.message.reply_text(
+        f"📢 **{group['name']}** guruhi a'zolariga yuboriladigan e'lon matnini kiriting:\n\n"
+        f"_(Masalan: Bugungi dars soat 20:00 ga ko'chirildi yoki Bugun dars bo'lmaydi)_\n\n"
+        f"Bekor qilish uchun /cancel buyrug'ini yuboring.",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    return GROUP_ANNOUNCE_WAIT_MSG
+
+async def send_group_announce(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.message
+    gid = context.user_data.get("announce_group_id")
+    group = db.get_group(gid)
+
+    if not group:
+        await msg.reply_text("❌ Guruh topilmadi.")
+        return ConversationHandler.END
+
+    # Guruh a'zolarini bazadan olish
+    with db.get_db() as conn:
+        subscribers = conn.execute("SELECT telegram_id FROM subscriptions WHERE group_id = ?", (gid,)).fetchall()
+
+    if not subscribers:
+        await msg.reply_text(f"❌ **{group['name']}** guruhida hali hech qanday a'zo yo'q.")
+        return ConversationHandler.END
+
+    await msg.reply_text(f"🚀 **{group['name']}** guruhining {len(subscribers)} ta a'zosiga e'lon yuborilmoqda...")
+
+    sent_count = 0
+    failed_count = 0
+
+    announce_header = f"📢 **E'LON [{group['name']}]**\n\n"
+
+    for sub in subscribers:
+        u_id = sub["telegram_id"]
+        try:
+            if msg.text:
+                await context.bot.send_message(chat_id=u_id, text=announce_header + msg.text, parse_mode=ParseMode.MARKDOWN)
+            else:
+                await context.bot.send_message(chat_id=u_id, text=announce_header, parse_mode=ParseMode.MARKDOWN)
+                await msg.copy(chat_id=u_id)
+            sent_count += 1
+        except Exception:
+            failed_count += 1
+
+    await msg.reply_text(
+        f"✅ **E'lon yuborildi!**\n\n"
+        f"📥 Yetib bordi: **{sent_count} ta o'quvchiga**\n"
+        f"❌ Yetib bormadi: **{failed_count} ta**",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=main_menu_keyboard()
+    )
+    return ConversationHandler.END
 
 # --- SUPER ADMIN PANEL ---
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -423,7 +487,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                 uname = f" (@{chat.username})" if chat.username else ""
                 text += f"{idx}. {full_name}{uname} — `ID: {uid}`\n"
             except Exception:
-                text += f"{idx}. ID: `{uid}`\n"
+                text += f"{idx}. Telegram Foydalanuvchisi — `ID: {uid}`\n"
 
         if len(text) > 4000:
             for x in range(0, len(text), 4000):
@@ -431,17 +495,10 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         else:
             await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
-    elif query.data == "admin_broadcast":
-        return await start_broadcast(update, context)
-
 # --- BROADCAST ---
 async def start_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != SUPER_ADMIN_ID:
-        if update.message:
-            await update.message.reply_text("⛔️ Bu buyruq faqat super admin uchun!")
-        elif update.callback_query:
-            await update.callback_query.message.reply_text("⛔️ Bu buyruq faqat super admin uchun!")
         return ConversationHandler.END
 
     msg_text = (
@@ -459,20 +516,18 @@ async def start_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def send_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
-    with db.get_db() as conn:
-        users = conn.execute("SELECT DISTINCT telegram_id FROM users").fetchall()
+    user_ids = db.get_all_users_list()
 
-    if not users:
+    if not user_ids:
         await msg.reply_text("❌ Bazada birorta ham foydalanuvchi topilmadi.")
         return ConversationHandler.END
 
-    await msg.reply_text(f"🚀 Xabar {len(users)} ta foydalanuvchiga yuborilmoqda...")
+    await msg.reply_text(f"🚀 Xabar {len(user_ids)} ta foydalanuvchiga yuborilmoqda...")
 
     sent_count = 0
     failed_count = 0
 
-    for user in users:
-        u_id = user["telegram_id"]
+    for u_id in user_ids:
         try:
             await msg.copy(chat_id=u_id)
             sent_count += 1
@@ -482,13 +537,14 @@ async def send_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await msg.reply_text(
         f"✅ **Xabar tarqatish yakunlandi!**\n\n"
         f"📥 Muvaffaqiyatli yetib bordi: **{sent_count}**\n"
-        f"❌ Yetib bormadi: **{failed_count}**",
-        parse_mode=ParseMode.MARKDOWN
+        f"❌ Yetib bormadi (bloklaganlar): **{failed_count}**",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=main_menu_keyboard()
     )
     return ConversationHandler.END
 
 async def cancel_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("❌ Xabar tarqatish bekor qilindi.")
+    await update.message.reply_text("❌ Jarayon bekor qilindi.", reply_markup=main_menu_keyboard())
     return ConversationHandler.END
 
 # --- Main App ---
@@ -506,6 +562,17 @@ def main():
         entry_points=[CallbackQueryHandler(start_add_lesson, pattern="^addlesson_")],
         states={WAIT_BULK_LESSONS: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_bulk_lessons)]},
         fallbacks=[CommandHandler("cancel", cancel_group_creation)]
+    )
+
+    group_announce_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(start_group_announce, pattern="^announcegroup_")],
+        states={
+            GROUP_ANNOUNCE_WAIT_MSG: [
+                MessageHandler(filters.ALL & ~filters.COMMAND, send_group_announce)
+            ]
+        },
+        fallbacks=[CommandHandler("cancel", cancel_broadcast)],
+        per_message=False
     )
 
     broadcast_conv = ConversationHandler(
@@ -529,9 +596,10 @@ def main():
     # Conversation
     app.add_handler(create_group_conv)
     app.add_handler(add_lesson_conv)
+    app.add_handler(group_announce_conv)
     app.add_handler(broadcast_conv)
 
-    # Menyu tugmalariga tekshiruvlar (Aniq moslik uchun)
+    # Menyu tugmalari
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_SETTINGS}$"), show_settings))
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_LESSONS}$"), show_student_lessons))
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_MANAGE_GROUPS}$"), show_managed_groups))
