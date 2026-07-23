@@ -175,3 +175,15 @@ def was_reminder_sent(lesson_id: int, user_id: int, r_type: str):
 def mark_reminder_sent(lesson_id: int, user_id: int, r_type: str):
     with get_db() as conn:
         conn.execute("INSERT OR IGNORE INTO sent_reminders (lesson_id, user_id, reminder_type) VALUES (?, ?, ?)", (lesson_id, user_id, r_type))
+
+def get_total_stats():
+    with get_db() as conn:
+        total_users = conn.execute("SELECT COUNT(DISTINCT user_id) FROM subscribers").fetchone()[0]
+        total_groups = conn.execute("SELECT COUNT(*) FROM groups").fetchone()[0]
+        total_lessons = conn.execute("SELECT COUNT(*) FROM lessons").fetchone()[0]
+        return total_users, total_groups, total_lessons
+
+def get_all_users_list():
+    with get_db() as conn:
+        rows = conn.execute("SELECT DISTINCT user_id FROM subscribers").fetchall()
+        return [r["user_id"] for r in rows if r["user_id"] != 0]
