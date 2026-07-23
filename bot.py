@@ -144,7 +144,7 @@ def generate_ics_calendar(group_name: str, lessons: list) -> io.BytesIO:
 # --- Keyboards ---
 BTN_LESSONS = "📚 Mening Darslarim"
 BTN_SUBSCRIPTIONS = "📋 Obunalarim"
-BTN_SETTINGS = "⚙️ Eslatma Sozlamalari"
+BTN_SETTINGS = "⚙️ Eslatma Sozlamalari 🔔"
 BTN_CREATE_GROUP = "➕ Yangi Guruh Yaratish"
 BTN_MANAGE_GROUPS = "📂 Guruhlarimni Boshqarish"
 BTN_GUIDE = "📖 Foydalanish tartibi"
@@ -218,7 +218,7 @@ async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     def icon(val): return "✅" if val == 1 else "❌"
 
-    text = "⚙️ **Eslatma Sozlamalari**\n\nQaysi vaqtlarda sizga eslatma kelishini tanlang:"
+    text = "⚙️🔔 **Eslatma Sozlamalari**\n\nQaysi vaqtlarda sizga eslatma kelishini tanlang:"
 
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton(f"{icon(st['rem_24h'])} 1 kun (24 soat) oldin", callback_data="toggle_24h")],
@@ -651,9 +651,12 @@ def main():
     app.add_handler(broadcast_conv)
 
     # Menyu tugmalari
-    app.add_handler(MessageHandler(filters.Regex(f"^{BTN_SETTINGS}$"), show_settings))
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_LESSONS}$"), show_student_lessons))
+    app.add_handler(MessageHandler(filters.Regex(f"^{BTN_SUBSCRIPTIONS}$"), show_user_subscriptions)) # <-- MANA BU QATORNI QO'SHING
+    app.add_handler(MessageHandler(filters.Regex(f"^{BTN_SETTINGS}$"), show_settings))
+    app.add_handler(MessageHandler(filters.Regex(f"^{BTN_CREATE_GROUP}$"), start_create_group))
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_MANAGE_GROUPS}$"), show_managed_groups))
+    app.add_handler(MessageHandler(filters.Regex(f"^{BTN_GUIDE}$"), show_guide)) # <-- MANA BU QATORNI HAM QO'SHING
 
     # Aniq patternli Callback'lar
     app.add_handler(CallbackQueryHandler(admin_all_users_callback, pattern="^get_all_subscribers$"))
