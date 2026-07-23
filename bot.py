@@ -64,12 +64,13 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
                 continue
             settings = db.get_user_settings(user_id)
             
-            async def send_if_needed(r_type, text_prefix):
+            # --- O'ZGARGAN JOYI: title_prefix qo'shildi ---
+            async def send_if_needed(r_type, text_prefix, title_prefix="🔔 **DARS ESLATMASI!**"):
                 if not db.was_reminder_sent(lesson_id, user_id, r_type):
                     try:
                         link_text = f"🔗 **Havola:** {l['meeting_link']}\n" if l['meeting_link'] else ""
                         msg = (
-                            f"🔔 **DARS ESLATMASI!**\n\n"
+                            f"{title_prefix}\n\n"
                             f"📚 Guruh: **{group['name']}**\n"
                             f"📖 Dars: **{l['title']}**\n"
                             f"👤 Ustoz: {l['teacher']}\n"
@@ -93,7 +94,8 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
             elif settings.get("rem_15m", 1) == 1 and 12 <= diff_minutes <= 18:
                 await send_if_needed("15m", "Darsga 15 daqiqa qoldi!")
             elif settings.get("rem_now", 1) == 1 and -2 <= diff_minutes <= 3:
-                await send_if_needed("now", "🔴 Dars boshlandi!")
+                # --- O'ZGARGAN JOYI: 1-qatorga maxsus sarlavha berildi ---
+                await send_if_needed("now", "🔴 Dars boshlandi!", title_prefix="🔴 **DARS BOSHLANDI!**")
                 
 # --- ICS Calendar Generator ---
 def generate_ics_calendar(group_name: str, lessons: list) -> io.BytesIO:
