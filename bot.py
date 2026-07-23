@@ -451,6 +451,58 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         else:
             await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
+# --- ADMIN BROADCAST (XABAR TARQATISH) ---
+BROADCAST_WAIT_MSG = 100
+
+async def start_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != SUPER_ADMIN_ID:
+        await update.message.reply_text("⛔️ Bu buyruq faqat super admin uchun!")
+        return ConversationHandler.END
+
+    await update.message.reply_text(
+        "📢 **Barcha foydalanuvchilarga xabar tarqatish**\n\n"
+        "Yubormoqchi bo'lgan xabaringizni (matn, rasm, video va h.k.) kiriting.\n"
+        "Bekor qilish uchun /cancel buyrug'ini yuboring.",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    return BROADCAST_WAIT_MSG
+
+async def send_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.message
+    # Bazadan barcha foydalanuvchilar ID sini olamiz
+    with db.get_db() as conn:
+        users = conn.execute("SELECT DISTINCT telegram_id FROM users").fetchall()
+
+    if not users:
+        await msg.reply_text("❌ Bazada birorta ham foydalanuvchi topilmadi.")
+        return ConversationHandler.END
+
+    await msg.reply_text(f"🚀 Xabar {len(users)} ta foydalanuvchiga yuborilmoqda...")
+
+    sent_count = 0
+    failed_count = 0
+
+    for user in users:
+        u_id = user["telegram_id"]
+        try:
+            await msg.copy(chat_id=u_id)
+            sent_count += 1
+        except Exception:
+            failed_count += 1
+
+    await msg.reply_text(
+        f"✅ **Xabar tarqatish yakunlandi!**\n\n"
+        f"📥 Muvaffaqiyatli yetib bordi: **{sent_count}**\n"
+        f"❌ Yetib bormadi (botni bloklaganlar): **{failed_count}**",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    return ConversationHandler.END
+
+async def cancel_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("❌ Xabar tarqatish bekor qilindi.")
+    return ConversationHandler.END
+
 # --- Background Reminder Engine ---
 async def check_and_send_reminders(context: ContextTypes.DEFAULT_TYPE):
     now = db.get_now()
@@ -537,12 +589,26 @@ def main():
         ]
     )
 
+    broadcast_conv = ConversationHandler(
+    entry_points=[
+        CommandHandler("broadcast", start_broadcast),
+        MessageHandler(filters.Regex("^📢 Xabar tarqatish$"), start_broadcast)
+    ],
+    states={
+        BROADCAST_WAIT_MSG: [
+            MessageHandler(filters.ALL & ~filters.COMMAND, send_broadcast)
+        ]
+    },
+    fallbacks=[CommandHandler("cancel", cancel_broadcast)]
+)
+    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("admin", admin_panel))
 
     app.add_handler(create_group_conv)
     app.add_handler(add_lesson_conv)
-
+    app.add_handler(broadcast_conv)
+    
     app.add_handler(MessageHandler(filters.Regex("^⚙️ Eslatma Sozlamalari$"), show_settings))
     app.add_handler(MessageHandler(filters.Regex("^📚 Mening Darslarim$"), show_student_lessons))
     app.add_handler(MessageHandler(filters.Regex("^📂 Guruhlarimni Boshqarish$"), show_managed_groups))
