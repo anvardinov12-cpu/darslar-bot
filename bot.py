@@ -33,53 +33,11 @@ SUPER_ADMIN_ID = 355784505
 
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 
-# Conversation States
+# States
 WAIT_GROUP_NAME = 1
 WAIT_BULK_LESSONS = 2
 BROADCAST_WAIT_MSG = 100
 GROUP_ANNOUNCE_WAIT_MSG = 101
-
-# --- ICS Calendar Generator ---
-def generate_ics_calendar(group_name: str, lessons: list) -> io.BytesIO:
-    ics_content = [
-        "BEGIN:VCALENDAR",
-        "VERSION:2.0",
-        "PRODID:-//Dars Eslatuvchi Bot//UZ",
-        "CALSCALE:GREGORIAN",
-        "METHOD:PUBLISH",
-        f"X-WR-CALNAME:{group_name}"
-    ]
-
-    for l in lessons:
-        dt_naive = datetime.strptime(l["start_time"], "%Y-%m-%d %H:%M:%S")
-        dt_utc = dt_naive - timedelta(hours=5)
-        dt_start_str = dt_utc.strftime("%Y%m%dT%H%M%SZ")
-        dt_end_str = (dt_utc + timedelta(hours=1, minutes=30)).strftime("%Y%m%dT%H%M%SZ")
-
-        summary = l["title"]
-        description = f"Ustoz: {l['teacher']}"
-        location = l["meeting_link"] if l["meeting_link"] else ""
-
-        ics_content.extend([
-            "BEGIN:VEVENT",
-            f"SUMMARY:{summary}",
-            f"DESCRIPTION:{description}",
-            f"LOCATION:{location}",
-            f"DTSTART:{dt_start_str}",
-            f"DTEND:{dt_end_str}",
-            f"UID:lesson_{l['id']}@darsbot",
-            "BEGIN:VALARM\nACTION:DISPLAY\nDESCRIPTION:Darsga 1 kun qoldi!\nTRIGGER:-P1D\nEND:VALARM",
-            "BEGIN:VALARM\nACTION:DISPLAY\nDESCRIPTION:Darsga 1 soat qoldi!\nTRIGGER:-PT1H\nEND:VALARM",
-            "BEGIN:VALARM\nACTION:DISPLAY\nDESCRIPTION:Darsga 15 daqiqa qoldi!\nTRIGGER:-PT15M\nEND:VALARM",
-            "BEGIN:VALARM\nACTION:DISPLAY\nDESCRIPTION:Dars boshlandi!\nTRIGGER:PT0M\nEND:VALARM",
-            "END:VEVENT"
-        ])
-
-    ics_content.append("END:VCALENDAR")
-    file_bytes = "\r\n".join(ics_content).encode('utf-8')
-    bio = io.BytesIO(file_bytes)
-    bio.name = f"{group_name}_darslar.ics"
-    return bio
 
 # --- Keyboards ---
 BTN_LESSONS = "📚 Mening Darslarim"
@@ -134,8 +92,7 @@ async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = (
         "⚙️ **Eslatma Sozlamalari**\n\n"
-        "Qaysi vaqtlarda shaxsiy lichkangizga eslatma kelishini tanlang:\n"
-        "Yoqish yoki o'chirish uchun bir marta bosing."
+        "Qaysi vaqtlarda shaxsiy lichkangizga eslatma kelishini tanlang:"
     )
 
     keyboard = InlineKeyboardMarkup([
@@ -162,8 +119,7 @@ async def toggle_setting_callback(update: Update, context: ContextTypes.DEFAULT_
 # --- Create Group ---
 async def start_create_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "📝 Yangi guruh nomini kiriting:\n\n"
-        "(Bekor qilish uchun '⬅️ Orqaga' tugmasini bosing)",
+        "📝 Yangi guruh nomini kiriting:",
         reply_markup=cancel_keyboard
     )
     return WAIT_GROUP_NAME
@@ -180,24 +136,16 @@ async def save_group_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         group_name = update.message.text.strip()
         user_id = update.effective_user.id
-
         db.create_group(group_name, user_id)
 
         await update.message.reply_text(
-            f"✅ **{group_name}** guruhi muvaffaqiyatli yaratildi!",
+            f"✅ **{group_name}** guruhi yaratildi!",
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=main_menu_keyboard()
         )
-        return ConversationHandler.END
-
     except Exception as e:
-        print(f"Guruh saqlashda xatolik: {e}")
-        await update.message.reply_text(
-            f"⚠️ Guruhni saqlashda xatolik yuz berdi:\n`{e}`",
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=main_menu_keyboard()
-        )
-        return ConversationHandler.END
+        await update.message.reply_text(f"⚠️ Xatolik: `{e}`", reply_markup=main_menu_keyboard())
+    return ConversationHandler.END
 
 # --- Bulk Add Lessons ---
 async def start_add_lesson(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -207,18 +155,10 @@ async def start_add_lesson(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["target_group_id"] = gid
 
     text = (
-        "✍️ **Darslarni bitta yoki bir vaqtda ko'plab yuboring!**\n\n"
-        "Har bir dars orasiga **`---`** (3 ta chiziq) qo'yib yuboring.\n\n"
-        "📌 **Har bir dars formati:**\n"
-        "`Dars Nomi`\n"
-        "`Ustoz Ismi`\n"
-        "`Zoom Link (yoki -)`\n"
-        "`YYYY-MM-DD HH:MM`\n\n"
-        "👇 **Namuna:**\n"
-        "`1-Dars: Kirish`\n"
-        "`Anvar Karimov`\n"
-        "`https://zoom.us/j/12345`\n"
-        "`2026-08-01 19:00`"
+        "✍️ **Darslarni kiriting:**\n\n"
+        "Har bir dars orasiga **`---`** qo'ying.\n"
+        "Format:\n"
+        "`Dars Nomi`\n`Ustoz`\n`Zoom Link (-)`\n`YYYY-MM-DD HH:MM`"
     )
     await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=cancel_keyboard)
     return WAIT_BULK_LESSONS
@@ -229,35 +169,25 @@ async def process_bulk_lessons(update: Update, context: ContextTypes.DEFAULT_TYP
 
     blocks = raw_text.split("---")
     added_count = 0
-    errors = []
 
-    for idx, block in enumerate(blocks, start=1):
+    for block in blocks:
         lines = [line.strip() for line in block.strip().split("\n") if line.strip()]
-        if not lines:
-            continue
-        
-        if len(lines) < 4:
-            errors.append(f"❌ {idx}-darsda qatorlar yetarli emas (4 qator bo'lishi kerak)")
-            continue
+        if len(lines) >= 4:
+            title, teacher, link, date_str = lines[0], lines[1], lines[2], lines[3]
+            meeting_link = "" if link == "-" else link
+            try:
+                dt = datetime.strptime(date_str, "%Y-%m-%d %H:%M")
+                start_iso = dt.strftime("%Y-%m-%d %H:%M:00")
+                db.add_lesson(group_id=gid, title=title, teacher=teacher, meeting_link=meeting_link, start_time_iso=start_iso)
+                added_count += 1
+            except ValueError:
+                pass
 
-        title, teacher, link, date_str = lines[0], lines[1], lines[2], lines[3]
-        meeting_link = "" if link == "-" else link
-
-        try:
-            dt = datetime.strptime(date_str, "%Y-%m-%d %H:%M")
-            start_iso = dt.strftime("%Y-%m-%d %H:%M:00")
-        except ValueError:
-            errors.append(f"❌ {idx}-darsda vaqt xato: '{date_str}'")
-            continue
-
-        db.add_lesson(group_id=gid, title=title, teacher=teacher, meeting_link=meeting_link, start_time_iso=start_iso)
-        added_count += 1
-
-    reply_msg = f"✅ **Jami {added_count} ta dars muvaffaqiyatli qo'shildi!**"
-    if errors:
-        reply_msg += "\n\n⚠️ **Quyidagilarda xatolik bor:**\n" + "\n".join(errors)
-
-    await update.message.reply_text(reply_msg, parse_mode=ParseMode.MARKDOWN, reply_markup=main_menu_keyboard())
+    await update.message.reply_text(
+        f"✅ Jami **{added_count}** ta dars qo'shildi!",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=main_menu_keyboard()
+    )
     return ConversationHandler.END
 
 # --- Display Lessons ---
@@ -276,53 +206,15 @@ async def show_student_lessons(update: Update, context: ContextTypes.DEFAULT_TYP
             continue
         
         has_lessons = True
-        text = f"📚 **Guruh: {g['name']}**\n"
-        text += f"📋 **Rejalashtirilgan darslar ({len(lessons)} ta):**\n\n"
-
+        text = f"📚 **Guruh: {g['name']}**\n\n"
         for idx, l in enumerate(lessons, start=1):
             dt_naive = datetime.strptime(l["start_time"], "%Y-%m-%d %H:%M:%S")
-            dt_loc = TZ.localize(dt_naive)
+            text += f"**{idx}. {l['title']}**\n👤 Ustoz: {l['teacher']}\n📅 Vaqti: {dt_naive.strftime('%d.%m.%Y %H:%M')}\n\n"
 
-            text += (
-                f"**{idx}. {l['title']}**\n"
-                f"👤 Ustoz: {l['teacher']}\n"
-                f"📅 Vaqti: {dt_loc.strftime('%d.%m.%Y %H:%M')}\n\n"
-            )
-
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📅 Barcha darslarni kalendarga saqlash (.ics)", callback_data=f"download_ics_{g['id']}")]
-        ])
-        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
     if not has_lessons:
         await update.message.reply_text("Yaqin orada rejalashtirilgan darslar yo'q.", reply_markup=main_menu_keyboard())
-
-async def ics_download_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer("⏳ .ics fayli tayyorlanmoqda...")
-
-    try:
-        data_parts = query.data.split("_")
-        group_id = int(data_parts[2])
-
-        group = db.get_group(group_id)
-        lessons = db.get_upcoming_lessons_for_group(group_id)
-
-        if not lessons:
-            await query.message.reply_text("❌ Ushbu guruhda darslar topilmadi.")
-            return
-
-        ics_file = generate_ics_calendar(group["name"], lessons)
-
-        await query.message.reply_document(
-            document=ics_file,
-            filename=f"{group['name']}_darslar.ics",
-            caption=f"📅 **{group['name']}** guruhining darslar kalendari fayli.",
-            parse_mode=ParseMode.MARKDOWN
-        )
-    except Exception as e:
-        print(f"ICS Yuborishda xatolik: {e}")
-        await query.message.reply_text(f"⚠️ Faylni yuklashda xatolik yuz berdi: {e}")
 
 # --- Group Management ---
 async def show_managed_groups(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -350,7 +242,7 @@ async def group_manage_callback(update: Update, context: ContextTypes.DEFAULT_TY
         btns = [
             [InlineKeyboardButton("➕ Dars Qo'shish", callback_data=f"addlesson_{gid}")],
             [InlineKeyboardButton("📢 Guruhga E'lon Yuborish", callback_data=f"announcegroup_{gid}")],
-            [InlineKeyboardButton("📋 Darslar Ro'yxati / O'chirish", callback_data=f"listlessons_{gid}")],
+            [InlineKeyboardButton("📋 Darslar Ro'yxati", callback_data=f"listlessons_{gid}")],
             [InlineKeyboardButton("🗑 Guruhni O'chirish", callback_data=f"delgroup_{gid}")]
         ]
         await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(btns))
@@ -359,7 +251,7 @@ async def group_manage_callback(update: Update, context: ContextTypes.DEFAULT_TY
         gid = int(data.split("_")[1])
         db.delete_group(gid)
         await query.edit_message_text("🗑 Guruh va undagi darslar o'chirildi.")
-        
+
 async def list_lessons_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -383,19 +275,16 @@ async def delete_lesson_callback(update: Update, context: ContextTypes.DEFAULT_T
     db.delete_lesson(lid)
     await query.edit_message_text("🗑 Dars o'chirildi.")
 
-# --- GROUP ANNOUNCEMENT ---
+# --- GROUP ANNOUNCEMENT (CRASH ISHLAMAYDI) ---
 async def start_group_announce(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     gid = int(query.data.split("_")[1])
-    context.user_data["announce_group_id"] = gid
+    context.user_data["announce_gid"] = gid
 
     group = db.get_group(gid)
-
     await query.message.reply_text(
-        f"📢 **{group['name']}** guruhi a'zolariga yuboriladigan e'lon matnini kiriting:\n\n"
-        f"_(Masalan: Bugungi dars soat 20:00 ga ko'chirildi yoki Bugun dars bo'lmaydi)_\n\n"
-        f"Bekor qilish uchun **⬅️ Orqaga** tugmasini bosing.",
+        f"📢 **{group['name']}** guruhi a'zolariga yuboriladigan e'lon matnini kiriting:",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=cancel_keyboard
     )
@@ -405,34 +294,35 @@ async def send_group_announce(update: Update, context: ContextTypes.DEFAULT_TYPE
     msg = update.message
     gid = context.user_data.get("announce_gid")
     group = db.get_group(gid)
-    subscribers = db.get_subscribers(gid)
 
-    if not subscribers:
-        await msg.reply_text("❌ Ushbu guruhda a'zolar topilmadi.")
+    if not group:
+        await msg.reply_text("❌ Guruh topilmadi.", reply_markup=main_menu_keyboard())
         return ConversationHandler.END
 
-    sent_count = 0
-    failed_count = 0
-    
-    # E'lon matni
+    # SQLite dan xavfsiz a'zolarni olish
+    with db.get_db() as conn:
+        subscribers = conn.execute("SELECT telegram_id FROM subscriptions WHERE group_id = ?", (gid,)).fetchall()
+
+    if not subscribers:
+        await msg.reply_text("❌ Ushbu guruhda a'zolar yo'q.", reply_markup=main_menu_keyboard())
+        return ConversationHandler.END
+
+    sent_count, failed_count = 0, 0
     announce_text = f"📢 **E'LON [{group['name']}]**\n\n{msg.text}"
 
-    for uid in subscribers:
+    for sub in subscribers:
+        u_id = sub["telegram_id"]
         try:
-            await context.bot.send_message(chat_id=uid, text=announce_text, parse_mode=ParseMode.MARKDOWN)
+            await context.bot.send_message(chat_id=u_id, text=announce_text, parse_mode=ParseMode.MARKDOWN)
             sent_count += 1
         except Exception:
             failed_count += 1
 
     await msg.reply_text(
-        f"✅ **E'lon yuborildi!**\n\n"
-        f"📥 Muvaffaqiyatli yetkazildi: **{sent_count}**\n"
-        f"❌ Yetib bormadi: **{failed_count}**",
+        f"✅ **E'lon yuborildi!**\n\n📥 Yetib bordi: **{sent_count}** ta\n❌ Yetib bormadi: **{failed_count}** ta",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=main_menu_keyboard()
     )
-    
-    # JARAYONNI MUKAMMAL YAKUNLASH (Bu juda muhim!):
     return ConversationHandler.END
 
 # --- SUPER ADMIN PANEL ---
@@ -486,19 +376,13 @@ async def admin_all_users_callback(update: Update, context: ContextTypes.DEFAULT
 
 # --- BROADCAST ---
 async def start_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id != SUPER_ADMIN_ID:
+    if update.effective_user.id != SUPER_ADMIN_ID:
         return ConversationHandler.END
 
-    msg_text = (
-        "📢 **Barcha foydalanuvchilarga xabar tarqatish**\n\n"
-        "Yubormoqchi bo'lgan xabaringizni kiriting.\n"
-        "Bekor qilish uchun **⬅️ Orqaga** tugmasini bosing."
-    )
-
+    msg_text = "📢 **Barcha foydalanuvchilarga xabar tarqatish**\n\nMatnni kiriting:"
     if update.callback_query:
         await update.callback_query.message.reply_text(msg_text, parse_mode=ParseMode.MARKDOWN, reply_markup=cancel_keyboard)
-    elif update.message:
+    else:
         await update.message.reply_text(msg_text, parse_mode=ParseMode.MARKDOWN, reply_markup=cancel_keyboard)
 
     return BROADCAST_WAIT_MSG
@@ -507,15 +391,7 @@ async def send_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     user_ids = db.get_all_users_list()
 
-    if not user_ids:
-        await msg.reply_text("❌ Bazada birorta ham foydalanuvchi topilmadi.", reply_markup=main_menu_keyboard())
-        return ConversationHandler.END
-
-    await msg.reply_text(f"🚀 Xabar {len(user_ids)} ta foydalanuvchiga yuborilmoqda...")
-
-    sent_count = 0
-    failed_count = 0
-
+    sent_count, failed_count = 0, 0
     for u_id in user_ids:
         try:
             await msg.copy(chat_id=u_id)
@@ -524,97 +400,62 @@ async def send_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
             failed_count += 1
 
     await msg.reply_text(
-        f"✅ **Xabar tarqatish yakunlandi!**\n\n"
-        f"📥 Muvaffaqiyatli yetib bordi: **{sent_count}**\n"
-        f"❌ Yetib bormadi (bloklaganlar): **{failed_count}**",
+        f"✅ **Xabar tarqatildi!**\n\n📥 Muvaffaqiyatli: **{sent_count}**\n❌ Yetib bormadi: **{failed_count}**",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=main_menu_keyboard()
     )
     return ConversationHandler.END
 
-async def cancel_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("❌ Jarayon bekor qilindi.", reply_markup=main_menu_keyboard())
-    return ConversationHandler.END
-
-# --- Main App ---
 # --- Main App ---
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # 1. Guruh yaratish muloqoti
     create_group_conv = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex(f"^{BTN_CREATE_GROUP}$"), start_create_group)],
-        states={
-            WAIT_GROUP_NAME: [MessageHandler(filters.TEXT & ~filters.Regex(f"^{BTN_BACK}$"), save_group_name)]
-        },
+        states={WAIT_GROUP_NAME: [MessageHandler(filters.TEXT & ~filters.Regex(f"^{BTN_BACK}$"), save_group_name)]},
         fallbacks=[MessageHandler(filters.Regex(f"^{BTN_BACK}$"), cancel_group_creation)],
-        per_chat=True,
-        per_user=True,
         per_message=False
     )
 
-    # 2. Dars qo'shish muloqoti
     add_lesson_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(start_add_lesson, pattern="^addlesson_")],
-        states={
-            WAIT_BULK_LESSONS: [MessageHandler(filters.TEXT & ~filters.Regex(f"^{BTN_BACK}$"), process_bulk_lessons)]
-        },
+        states={WAIT_BULK_LESSONS: [MessageHandler(filters.TEXT & ~filters.Regex(f"^{BTN_BACK}$"), process_bulk_lessons)]},
         fallbacks=[MessageHandler(filters.Regex(f"^{BTN_BACK}$"), cancel_group_creation)],
-        per_chat=True,
-        per_user=True,
         per_message=False
     )
 
-    # 3. Guruhga E'lon yuborish muloqoti (To'g'rilandi)
     group_announce_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(start_group_announce, pattern="^announcegroup_")],
-        states={
-            GROUP_ANNOUNCE_WAIT_MSG: [
-                MessageHandler(filters.TEXT & ~filters.Regex(f"^{BTN_BACK}$"), send_group_announce)
-            ]
-        },
-        fallbacks=[MessageHandler(filters.Regex(f"^{BTN_BACK}$"), cancel_broadcast)],
-        per_chat=True,
-        per_user=True,
+        states={GROUP_ANNOUNCE_WAIT_MSG: [MessageHandler(filters.TEXT & ~filters.Regex(f"^{BTN_BACK}$"), send_group_announce)]},
+        fallbacks=[MessageHandler(filters.Regex(f"^{BTN_BACK}$"), cancel_group_creation)],
         per_message=False
     )
 
-    # 4. Super Admin xabar tarqatish muloqoti
     broadcast_conv = ConversationHandler(
         entry_points=[
             CommandHandler("broadcast", start_broadcast),
             CallbackQueryHandler(start_broadcast, pattern="^admin_broadcast$")
         ],
-        states={
-            BROADCAST_WAIT_MSG: [
-                MessageHandler(filters.ALL & ~filters.Regex(f"^{BTN_BACK}$"), send_broadcast)
-            ]
-        },
-        fallbacks=[MessageHandler(filters.Regex(f"^{BTN_BACK}$"), cancel_broadcast)],
-        per_chat=True,
-        per_user=True,
+        states={BROADCAST_WAIT_MSG: [MessageHandler(filters.ALL & ~filters.Regex(f"^{BTN_BACK}$"), send_broadcast)]},
+        fallbacks=[MessageHandler(filters.Regex(f"^{BTN_BACK}$"), cancel_group_creation)],
         per_message=False
     )
 
-    # Buyruqlar (Commands)
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("admin", admin_panel))
 
-    # Conversation Handlers (Tugmalar ishga tushishi uchun birinchi o'rinda turishi shart!)
+    # Handlers
     app.add_handler(create_group_conv)
     app.add_handler(add_lesson_conv)
     app.add_handler(group_announce_conv)
     app.add_handler(broadcast_conv)
 
-    # Menyu tugmalari (Reply Keyboard)
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_SETTINGS}$"), show_settings))
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_LESSONS}$"), show_student_lessons))
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_MANAGE_GROUPS}$"), show_managed_groups))
 
-  # Callback Query'lar (Tartib muhim!)
-    app.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^admin_"))
+    app.add_handler(CallbackQueryHandler(admin_all_users_callback, pattern="^admin_all_users$"))
     app.add_handler(CallbackQueryHandler(toggle_setting_callback, pattern="^toggle_"))
-    app.add_handler(CallbackQueryHandler(ics_download_callback, pattern="^download_ics_"))
     app.add_handler(CallbackQueryHandler(list_lessons_callback, pattern="^listlessons_"))
     app.add_handler(CallbackQueryHandler(delete_lesson_callback, pattern="^(delete_lesson_|dellesson_)"))
     app.add_handler(CallbackQueryHandler(group_manage_callback, pattern="^(managegroup_|delgroup_)"))
