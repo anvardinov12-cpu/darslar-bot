@@ -359,7 +359,7 @@ async def group_manage_callback(update: Update, context: ContextTypes.DEFAULT_TY
         gid = int(data.split("_")[1])
         db.delete_group(gid)
         await query.edit_message_text("🗑 Guruh va undagi darslar o'chirildi.")
-
+        
 async def list_lessons_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -547,32 +547,49 @@ async def cancel_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 # --- Main App ---
+# --- Main App ---
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Conversation Handlers
+    # 1. Guruh yaratish muloqoti
     create_group_conv = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex(f"^{BTN_CREATE_GROUP}$"), start_create_group)],
-        states={WAIT_GROUP_NAME: [MessageHandler(filters.TEXT & ~filters.Regex(f"^{BTN_BACK}$"), save_group_name)]},
-        fallbacks=[MessageHandler(filters.Regex(f"^{BTN_BACK}$"), cancel_group_creation)]
+        states={
+            WAIT_GROUP_NAME: [MessageHandler(filters.TEXT & ~filters.Regex(f"^{BTN_BACK}$"), save_group_name)]
+        },
+        fallbacks=[MessageHandler(filters.Regex(f"^{BTN_BACK}$"), cancel_group_creation)],
+        per_chat=True,
+        per_user=True,
+        per_message=False
     )
 
+    # 2. Dars qo'shish muloqoti
     add_lesson_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(start_add_lesson, pattern="^addlesson_")],
-        states={WAIT_BULK_LESSONS: [MessageHandler(filters.TEXT & ~filters.Regex(f"^{BTN_BACK}$"), process_bulk_lessons)]},
-        fallbacks=[MessageHandler(filters.Regex(f"^{BTN_BACK}$"), cancel_group_creation)]
+        states={
+            WAIT_BULK_LESSONS: [MessageHandler(filters.TEXT & ~filters.Regex(f"^{BTN_BACK}$"), process_bulk_lessons)]
+        },
+        fallbacks=[MessageHandler(filters.Regex(f"^{BTN_BACK}$"), cancel_group_creation)],
+        per_chat=True,
+        per_user=True,
+        per_message=False
     )
 
+    # 3. Guruhga E'lon yuborish muloqoti (To'g'rilandi)
     group_announce_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(start_group_announce, pattern="^announcegroup_")],
         states={
             GROUP_ANNOUNCE_WAIT_MSG: [
-                MessageHandler(filters.ALL & ~filters.Regex(f"^{BTN_BACK}$"), send_group_announce)
+                MessageHandler(filters.TEXT & ~filters.Regex(f"^{BTN_BACK}$"), send_group_announce)
             ]
         },
-        fallbacks=[MessageHandler(filters.Regex(f"^{BTN_BACK}$"), cancel_broadcast)]
+        fallbacks=[MessageHandler(filters.Regex(f"^{BTN_BACK}$"), cancel_broadcast)],
+        per_chat=True,
+        per_user=True,
+        per_message=False
     )
 
+    # 4. Super Admin xabar tarqatish muloqoti
     broadcast_conv = ConversationHandler(
         entry_points=[
             CommandHandler("broadcast", start_broadcast),
@@ -583,25 +600,28 @@ def main():
                 MessageHandler(filters.ALL & ~filters.Regex(f"^{BTN_BACK}$"), send_broadcast)
             ]
         },
-        fallbacks=[MessageHandler(filters.Regex(f"^{BTN_BACK}$"), cancel_broadcast)]
+        fallbacks=[MessageHandler(filters.Regex(f"^{BTN_BACK}$"), cancel_broadcast)],
+        per_chat=True,
+        per_user=True,
+        per_message=False
     )
 
-    # Buyruqlar
+    # Buyruqlar (Commands)
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("admin", admin_panel))
 
-    # Conversation
+    # Conversation Handlers (Tugmalar ishga tushishi uchun birinchi o'rinda turishi shart!)
     app.add_handler(create_group_conv)
     app.add_handler(add_lesson_conv)
     app.add_handler(group_announce_conv)
     app.add_handler(broadcast_conv)
 
-    # Menyu tugmalari
+    # Menyu tugmalari (Reply Keyboard)
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_SETTINGS}$"), show_settings))
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_LESSONS}$"), show_student_lessons))
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_MANAGE_GROUPS}$"), show_managed_groups))
 
-    # Callback Query'lar
+    # Inline Callback Query Handlers (Qolgan tugmalar)
     app.add_handler(CallbackQueryHandler(toggle_setting_callback, pattern="^toggle_"))
     app.add_handler(CallbackQueryHandler(ics_download_callback, pattern="^download_ics_"))
     app.add_handler(CallbackQueryHandler(list_lessons_callback, pattern="^listlessons_"))
