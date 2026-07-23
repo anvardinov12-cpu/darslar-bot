@@ -573,8 +573,8 @@ async def check_and_send_reminders(context: ContextTypes.DEFAULT_TYPE):
 
 # --- Main App ---
 def main():
-    # Application yaratish (Bu yerda o'zingizning haqiqiy bot tokeningiz tursin)
-    app = ApplicationBuilder().token("BOT_TOKENINGIZ").build()
+    # Tokenni o'zingizning kodingizdagi o'zgaruvchi bilan olamiz (Tokeningiz o'zgarmaydi)
+    app = ApplicationBuilder().token(TOKEN).build()  # Agar sizda BOT_TOKEN bo'lsa, TOKEN o'rniga BOT_TOKEN deb yozing
 
     # 1. Broadcaster Conversation Handler
     broadcast_conv = ConversationHandler(
@@ -606,7 +606,7 @@ def main():
     app.add_handler(MessageHandler(filters.Regex("^📚 Mening Darslarim$"), show_student_lessons))
     app.add_handler(MessageHandler(filters.Regex("^📁 Guruhlarimni Boshqarish$"), show_managed_groups))
 
-    # 5. Inline Tugmalar (CallbackQueryHandlers - Rasmingizdagidek to'liq 4 ta)
+    # 5. Inline Tugmalar (CallbackQueryHandlers - Barchasi to'liq)
     app.add_handler(CallbackQueryHandler(toggle_setting_callback, pattern="^toggle_"))
     app.add_handler(CallbackQueryHandler(ics_download_callback, pattern="^download_ics_"))
     app.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^admin_"))
@@ -617,4 +617,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
