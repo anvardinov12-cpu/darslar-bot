@@ -147,6 +147,11 @@ def get_subscribers(group_id: int):
         """, (group_id,)).fetchall()
         return [dict(r) for r in rows]
 
+# --- Obunani bekor qilish uchun funksiya ---
+def remove_subscriber(user_id: int, group_id: int):
+    with get_db() as conn:
+        conn.execute("DELETE FROM subscribers WHERE user_id = ? AND group_id = ?", (user_id, group_id))
+        
 # --- User Notification Settings ---
 def get_user_settings(user_id: int):
     with get_db() as conn:
