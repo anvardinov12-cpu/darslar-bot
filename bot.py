@@ -220,7 +220,7 @@ async def start_add_lesson(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "`https://zoom.us/j/12345`\n"
         "`2026-08-01 19:00`"
     )
-    await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=cancel_keyboard)
     return WAIT_BULK_LESSONS
 
 async def process_bulk_lessons(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -383,7 +383,7 @@ async def delete_lesson_callback(update: Update, context: ContextTypes.DEFAULT_T
     db.delete_lesson(lid)
     await query.edit_message_text("🗑 Dars o'chirildi.")
 
-# --- GROUP ANNOUNCEMENT (Guruhga E'lon yuborish) ---
+# --- GROUP ANNOUNCEMENT ---
 async def start_group_announce(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -395,8 +395,9 @@ async def start_group_announce(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.message.reply_text(
         f"📢 **{group['name']}** guruhi a'zolariga yuboriladigan e'lon matnini kiriting:\n\n"
         f"_(Masalan: Bugungi dars soat 20:00 ga ko'chirildi yoki Bugun dars bo'lmaydi)_\n\n"
-        f"Bekor qilish uchun /cancel buyrug'ini yuboring.",
-        parse_mode=ParseMode.MARKDOWN
+        f"Bekor qilish uchun **⬅️ Orqaga** tugmasini bosing.",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=cancel_keyboard
     )
     return GROUP_ANNOUNCE_WAIT_MSG
 
@@ -406,15 +407,14 @@ async def send_group_announce(update: Update, context: ContextTypes.DEFAULT_TYPE
     group = db.get_group(gid)
 
     if not group:
-        await msg.reply_text("❌ Guruh topilmadi.")
+        await msg.reply_text("❌ Guruh topilmadi.", reply_markup=main_menu_keyboard())
         return ConversationHandler.END
 
-    # Guruh a'zolarini bazadan olish
     with db.get_db() as conn:
         subscribers = conn.execute("SELECT telegram_id FROM subscriptions WHERE group_id = ?", (gid,)).fetchall()
 
     if not subscribers:
-        await msg.reply_text(f"❌ **{group['name']}** guruhida hali hech qanday a'zo yo'q.")
+        await msg.reply_text(f"❌ **{group['name']}** guruhida hali hech qanday a'zo yo'q.", reply_markup=main_menu_keyboard())
         return ConversationHandler.END
 
     await msg.reply_text(f"🚀 **{group['name']}** guruhining {len(subscribers)} ta a'zosiga e'lon yuborilmoqda...")
@@ -466,34 +466,33 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ])
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
 
-async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_all_users_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    
+
     if query.from_user.id != SUPER_ADMIN_ID:
         return
 
-    if query.data == "admin_all_users":
-        user_ids = db.get_all_users_list()
-        if not user_ids:
-            await query.message.reply_text("Obunachilar topilmadi.")
-            return
+    user_ids = db.get_all_users_list()
+    if not user_ids:
+        await query.message.reply_text("Obunachilar topilmadi.")
+        return
 
-        text = f"👥 **Barcha Bot Obunachilari ({len(user_ids)} ta):**\n\n"
-        for idx, uid in enumerate(user_ids, start=1):
-            try:
-                chat = await context.bot.get_chat(uid)
-                full_name = chat.full_name or "Foydalanuvchi"
-                uname = f" (@{chat.username})" if chat.username else ""
-                text += f"{idx}. {full_name}{uname} — `ID: {uid}`\n"
-            except Exception:
-                text += f"{idx}. Telegram Foydalanuvchisi — `ID: {uid}`\n"
+    text = f"👥 **Barcha Bot Obunachilari ({len(user_ids)} ta):**\n\n"
+    for idx, uid in enumerate(user_ids, start=1):
+        try:
+            chat = await context.bot.get_chat(uid)
+            full_name = chat.full_name or "Foydalanuvchi"
+            uname = f" (@{chat.username})" if chat.username else ""
+            text += f"{idx}. {full_name}{uname} — `ID: {uid}`\n"
+        except Exception:
+            text += f"{idx}. Telegram Foydalanuvchisi — `ID: {uid}`\n"
 
-        if len(text) > 4000:
-            for x in range(0, len(text), 4000):
-                await query.message.reply_text(text[x:x+4000], parse_mode=ParseMode.MARKDOWN)
-        else:
-            await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    if len(text) > 4000:
+        for x in range(0, len(text), 4000):
+            await query.message.reply_text(text[x:x+4000], parse_mode=ParseMode.MARKDOWN)
+    else:
+        await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
 # --- BROADCAST ---
 async def start_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -504,13 +503,13 @@ async def start_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg_text = (
         "📢 **Barcha foydalanuvchilarga xabar tarqatish**\n\n"
         "Yubormoqchi bo'lgan xabaringizni kiriting.\n"
-        "Bekor qilish uchun /cancel buyrug'ini yuboring."
+        "Bekor qilish uchun **⬅️ Orqaga** tugmasini bosing."
     )
 
     if update.callback_query:
-        await update.callback_query.message.reply_text(msg_text, parse_mode=ParseMode.MARKDOWN)
+        await update.callback_query.message.reply_text(msg_text, parse_mode=ParseMode.MARKDOWN, reply_markup=cancel_keyboard)
     elif update.message:
-        await update.message.reply_text(msg_text, parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text(msg_text, parse_mode=ParseMode.MARKDOWN, reply_markup=cancel_keyboard)
 
     return BROADCAST_WAIT_MSG
 
@@ -519,7 +518,7 @@ async def send_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_ids = db.get_all_users_list()
 
     if not user_ids:
-        await msg.reply_text("❌ Bazada birorta ham foydalanuvchi topilmadi.")
+        await msg.reply_text("❌ Bazada birorta ham foydalanuvchi topilmadi.", reply_markup=main_menu_keyboard())
         return ConversationHandler.END
 
     await msg.reply_text(f"🚀 Xabar {len(user_ids)} ta foydalanuvchiga yuborilmoqda...")
@@ -560,19 +559,18 @@ def main():
 
     add_lesson_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(start_add_lesson, pattern="^addlesson_")],
-        states={WAIT_BULK_LESSONS: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_bulk_lessons)]},
-        fallbacks=[CommandHandler("cancel", cancel_group_creation)]
+        states={WAIT_BULK_LESSONS: [MessageHandler(filters.TEXT & ~filters.Regex(f"^{BTN_BACK}$"), process_bulk_lessons)]},
+        fallbacks=[MessageHandler(filters.Regex(f"^{BTN_BACK}$"), cancel_group_creation)]
     )
 
     group_announce_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(start_group_announce, pattern="^announcegroup_")],
         states={
             GROUP_ANNOUNCE_WAIT_MSG: [
-                MessageHandler(filters.ALL & ~filters.COMMAND, send_group_announce)
+                MessageHandler(filters.ALL & ~filters.Regex(f"^{BTN_BACK}$"), send_group_announce)
             ]
         },
-        fallbacks=[CommandHandler("cancel", cancel_broadcast)],
-        per_message=False
+        fallbacks=[MessageHandler(filters.Regex(f"^{BTN_BACK}$"), cancel_broadcast)]
     )
 
     broadcast_conv = ConversationHandler(
@@ -582,11 +580,10 @@ def main():
         ],
         states={
             BROADCAST_WAIT_MSG: [
-                MessageHandler(filters.ALL & ~filters.COMMAND, send_broadcast)
+                MessageHandler(filters.ALL & ~filters.Regex(f"^{BTN_BACK}$"), send_broadcast)
             ]
         },
-        fallbacks=[CommandHandler("cancel", cancel_broadcast)],
-        per_message=False
+        fallbacks=[MessageHandler(filters.Regex(f"^{BTN_BACK}$"), cancel_broadcast)]
     )
 
     # Buyruqlar
@@ -609,7 +606,7 @@ def main():
     app.add_handler(CallbackQueryHandler(ics_download_callback, pattern="^download_ics_"))
     app.add_handler(CallbackQueryHandler(list_lessons_callback, pattern="^listlessons_"))
     app.add_handler(CallbackQueryHandler(delete_lesson_callback, pattern="^delete_lesson_|dellesson_"))
-    app.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^admin_"))
+    app.add_handler(CallbackQueryHandler(admin_all_users_callback, pattern="^admin_all_users$"))
     app.add_handler(CallbackQueryHandler(group_manage_callback, pattern="^(managegroup_|delgroup_)"))
 
     app.run_polling()
