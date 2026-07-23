@@ -143,15 +143,18 @@ def generate_ics_calendar(group_name: str, lessons: list) -> io.BytesIO:
 
 # --- Keyboards ---
 BTN_LESSONS = "📚 Mening Darslarim"
+BTN_SUBSCRIPTIONS = "📋 Obunalarim"
 BTN_SETTINGS = "⚙️ Eslatma Sozlamalari"
 BTN_CREATE_GROUP = "➕ Yangi Guruh Yaratish"
 BTN_MANAGE_GROUPS = "📂 Guruhlarimni Boshqarish"
+BTN_GUIDE = "📖 Foydalanish tartibi"
 BTN_BACK = "⬅️ Orqaga"
 
 def main_menu_keyboard():
     keyboard = [
-        [KeyboardButton(BTN_LESSONS), KeyboardButton(BTN_SETTINGS)],
-        [KeyboardButton(BTN_CREATE_GROUP), KeyboardButton(BTN_MANAGE_GROUPS)]
+        [KeyboardButton(BTN_LESSONS), KeyboardButton(BTN_SUBSCRIPTIONS)],
+        [KeyboardButton(BTN_SETTINGS), KeyboardButton(BTN_CREATE_GROUP)],
+        [KeyboardButton(BTN_MANAGE_GROUPS), KeyboardButton(BTN_GUIDE)]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -169,7 +172,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             db.add_subscriber(user.id, group["id"], user.first_name)
             await update.message.reply_text(
                 f"🎉 Siz **{group['name']}** guruhiga muvaffaqiyatli a'zo bo'ldingiz!\n\n"
-                f"Dars eslatmalari darsingizdan 1 kun, 12,6,1 soat, 15 daqiqa avval va dars boshlanganida yuboriladi.",
+                f"Dars eslatmalari darsingizdan 1 kun, 12, 6, 1 soat, 15 daqiqa avval va dars boshlanganida yuboriladi.\n\n"
+                f"---\n\n"
+                f"📌 **Botdan foydalanish tartibi:**\n"
+                f"1️⃣ **Eslatmalar:** Dars vaqti yaqinlashganda bot sizga avtomatik ravishda eslatma va Zoom havolalarini yuboradi.\n"
+                f"2️⃣ **Sozlamalar:** Eslatma vaqtlarini o'zingizga moslash uchun menyudan foydalaning.\n"
+                f"3️⃣ **Guruhdan chiqish:** '📋 Obunalarim' bo'limidan istalgan vaqtda obunangizni bekor qilishingiz mumkin.",
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=main_menu_keyboard()
             )
@@ -184,6 +192,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=main_menu_keyboard()
     )
+
+# --- Guide / Foydalanish tartibi ---
+async def show_guide(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (
+        "📖 **BOTDAN FOYDALANISH YO'RIQNOMASI**\n\n"
+        "Botimizdan quyidagi **2 xil yo'nalishda** foydalanishingiz mumkin:\n\n"
+        "1️⃣ **Oddiy o'quvchi / Talaba uchun:**\n"
+        "• Ustozingiz yoki adminimiz bergan maxsus **havola (link)** ustiga bosing.\n"
+        "• Botga kirib guruhga avtomatik a'zo bo'lasiz.\n"
+        "• Dars vaqti yaqinlashganda bot sizga eslatma va Zoom havolalarini yuborib turadi.\n"
+        "• Agar biron guruh eslatmalari kerak bo'lmasa, menyudagi **'📋 Obunalarim'** bo'limiga kirib, o'sha guruhdan obunangizni osongina bekor qilishingiz mumkin.\n\n"
+        "2️⃣ **Admin / O'qituvchi uchun:**\n"
+        "• Menyudagi **'➕ Yangi Guruh Yaratish'** tugmasini bosib o'z dars guruhingizni oching.\n"
+        "• **'📂 Guruhlarimni Boshqarish'** bo'limi orqali guruhingizga darslarni qo'shing (ko'p darslarni shablon orqali bir yo'la kiritish mumkin).\n"
+        "• Chiqqan **A'zolik havolasini** o'quvchilaringizga ulashing.\n"
+        "• O'quvchilar shu havola orqali guruhga qo'shiladi, siz esa ularning ro'yxatini ko'rib, zarur paytda e'lonlar yubora olasiz!"
+    )
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=main_menu_keyboard())
 
 # --- Settings ---
 async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -301,6 +327,31 @@ async def show_student_lessons(update: Update, context: ContextTypes.DEFAULT_TYP
 
     if not has_lessons:
         await update.message.reply_text("Yaqin orada rejalashtirilgan darslar yo'q.", reply_markup=main_menu_keyboard())
+
+# --- Subscriptions Management (Obunalarim) ---
+async def show_user_subscriptions(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    groups = db.get_user_subscribed_groups(user.id)
+
+    if not groups:
+        await update.message.reply_text("Siz hali hech qanday guruhga obuna bo'lmagansiz.", reply_markup=main_menu_keyboard())
+        return
+
+    text = "📋 **Sizning obunalaringiz:**\n\nQuyidagi guruhlardan birortasining eslatmalarini to'xtatish uchun obunani bekor qilishingiz mumkin:"
+    keyboard = []
+    for g in groups:
+        keyboard.append([InlineKeyboardButton(f"❌ {g['name']} - Obunani bekor qilish", callback_data=f"unsub_{g['id']}")])
+
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def unsubscribe_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    gid = int(query.data.split("_")[1])
+    user_id = query.from_user.id
+    
+    db.remove_subscriber(user_id, gid)
+    await query.edit_message_text("✅ Guruh obunasi muvaffaqiyatli bekor qilindi va endi bu guruhdan eslatmalar kelmaydi.")
 
 async def ics_download_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
