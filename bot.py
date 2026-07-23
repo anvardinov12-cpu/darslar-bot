@@ -183,22 +183,32 @@ async def cancel_group_creation(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def save_group_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Guruh nomini saqlash"""
-    group_name = update.message.text.strip()
-    user_id = update.effective_user.id
+    try:
+        group_name = update.message.text.strip()
+        user_id = update.effective_user.id
 
-    db.add_group(user_id, group_name)
+        # Ma'lumotlar bazasiga saqlaymiz
+        db.add_group(user_id, group_name)
 
-    main_menu = ReplyKeyboardMarkup([
-        ["📚 Mening Darslarim", "⚙️ Eslatma Sozlamalari"],
-        ["➕ Yangi Guruh Yaratish", "📂 Guruhlarimni Boshqarish"]
-    ], resize_keyboard=True)
+        main_menu = ReplyKeyboardMarkup([
+            ["📚 Mening Darslarim", "⚙️ Eslatma Sozlamalari"],
+            ["➕ Yangi Guruh Yaratish", "📂 Guruhlarimni Boshqarish"]
+        ], resize_keyboard=True)
 
-    await update.message.reply_text(
-        f"✅ **{group_name}** guruh muvaffaqiyatli yaratildi!",
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=main_menu
-    )
-    return ConversationHandler.END
+        await update.message.reply_text(
+            f"✅ **{group_name}** guruhi muvaffaqiyatli yaratildi!",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=main_menu
+        )
+        return ConversationHandler.END
+
+    except Exception as e:
+        print(f"Guruh saqlashda xatolik: {e}")
+        await update.message.reply_text(
+            f"⚠️ Guruhni saqlashda xatolik yuz berdi:\n`{e}`",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return ConversationHandler.END
     
 # --- Bulk Add Lessons (1 Oylik / 20 ta Darsni Bittada Qo'shish) ---
 async def start_add_lesson(update: Update, context: ContextTypes.DEFAULT_TYPE):
