@@ -132,7 +132,7 @@ async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     def icon(val): return "✅" if val == 1 else "❌"
 
-    text = "⚙️ **Eslatma Sozlamalari**\n\nQaysi vaqtlarda shaxsiy lichkangizga eslatma kelishini tanlang:"
+    text = "⚙️ **Eslatma Sozlamalari**\n\nQaysi vaqtlarda sizga eslatma kelishini tanlang:"
 
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton(f"{icon(st['rem_24h'])} 1 kun (24 soat) oldin", callback_data="toggle_24h")],
