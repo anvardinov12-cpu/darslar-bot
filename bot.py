@@ -64,11 +64,12 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
                 continue
             settings = db.get_user_settings(user_id)
             
-            # --- O'ZGARGAN JOYI: title_prefix qo'shildi ---
-            async def send_if_needed(r_type, text_prefix, title_prefix="🔔 **DARS ESLATMASI!**"):
+            # --- O'ZGARGAN JOYI: include_link parametri qo'shildi ---
+            async def send_if_needed(r_type, text_prefix, title_prefix="🔔 **DARS ESLATMASI!**", include_link=False):
                 if not db.was_reminder_sent(lesson_id, user_id, r_type):
                     try:
-                        link_text = f"🔗 **Havola:** {l['meeting_link']}\n" if l['meeting_link'] else ""
+                        # Havola faqat ruxsat berilgan eslatmalarda chiqadi
+                        link_text = f"🔗 **Havola:** {l['meeting_link']}\n" if (include_link and l['meeting_link']) else ""
                         msg = (
                             f"{title_prefix}\n\n"
                             f"📚 Guruh: **{group['name']}**\n"
@@ -84,18 +85,19 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
                         logging.error(f"Xabar yuborishda xatolik ({user_id}): {e}")
 
             if settings.get("rem_24h", 1) == 1 and 1435 <= diff_minutes <= 1445:
-                await send_if_needed("24h", "Darsga 24 soat qoldi!")
+                await send_if_needed("24h", "Darsga 24 soat qoldi!", include_link=False)
             elif settings.get("rem_12h", 1) == 1 and 715 <= diff_minutes <= 725:
-                await send_if_needed("12h", "Darsga 12 soat qoldi!")
+                await send_if_needed("12h", "Darsga 12 soat qoldi!", include_link=False)
             elif settings.get("rem_6h", 1) == 1 and 355 <= diff_minutes <= 365:
-                await send_if_needed("6h", "Darsga 6 soat qoldi!")
+                await send_if_needed("6h", "Darsga 6 soat qoldi!", include_link=False)
             elif settings.get("rem_1h", 1) == 1 and 55 <= diff_minutes <= 65:
-                await send_if_needed("1h", "Darsga 1 soat qoldi!")
+                await send_if_needed("1h", "Darsga 1 soat qoldi!", include_link=False)
             elif settings.get("rem_15m", 1) == 1 and 12 <= diff_minutes <= 18:
-                await send_if_needed("15m", "Darsga 15 daqiqa qoldi!")
+                # --- 15 daqiqalikda havola chiqadi ---
+                await send_if_needed("15m", "Darsga 15 daqiqa qoldi!", include_link=True)
             elif settings.get("rem_now", 1) == 1 and -2 <= diff_minutes <= 3:
-                # --- O'ZGARGAN JOYI: 1-qatorga maxsus sarlavha berildi ---
-                await send_if_needed("now", "🔴 Dars boshlandi!", title_prefix="🔴 **DARS BOSHLANDI!**")
+                # --- Dars boshlanganda havola chiqadi ---
+                await send_if_needed("now", "🔴 Dars boshlandi!", title_prefix="🔴 **DARS BOSHLANDI!**", include_link=True)
                 
 # --- ICS Calendar Generator ---
 def generate_ics_calendar(group_name: str, lessons: list) -> io.BytesIO:
