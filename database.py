@@ -195,3 +195,10 @@ def get_all_users_list():
     with get_db() as conn:
         rows = conn.execute("SELECT DISTINCT user_id FROM subscribers").fetchall()
         return [r["user_id"] for r in rows if r["user_id"] != 0]
+
+# --- Ban / Kick User ---
+def delete_user_from_bot(user_id: int):
+    with get_db() as conn:
+        conn.execute("DELETE FROM subscribers WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM user_settings WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM sent_reminders WHERE user_id = ?", (user_id,))
