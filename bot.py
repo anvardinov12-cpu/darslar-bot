@@ -290,6 +290,7 @@ async def group_manage_callback(update: Update, context: ContextTypes.DEFAULT_TY
         invite_link = f"https://t.me/{bot.username}?start=g_{group['invite_code']}"
         text = f"📌 **Guruh:** {group['name']}\n🔗 **A'zolik havolasi:** `{invite_link}`"
         btns = [
+            [InlineKeyboardButton("👥 Guruh A'zolari", callback_data=f"groupmembers_{gid}")], # <--- YANGI TUGMA SHU YERDA
             [InlineKeyboardButton("➕ Dars Qo'shish", callback_data=f"addlesson_{gid}")],
             [InlineKeyboardButton("📢 Guruhga E'lon Yuborish", callback_data=f"announcegroup_{gid}")],
             [InlineKeyboardButton("📋 Darslar Ro'yxati", callback_data=f"listlessons_{gid}")],
@@ -301,6 +302,28 @@ async def group_manage_callback(update: Update, context: ContextTypes.DEFAULT_TY
         gid = int(data.split("_")[1])
         db.delete_group(gid)
         await query.edit_message_text("🗑 Guruh va undagi darslar o'chirildi.")
+
+# --- YANGI QO'SHILDI: Guruh a'zolarini ko'rish ---
+async def group_members_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer("⏳ Ro'yxat olinmoqda...")
+    gid = int(query.data.split("_")[1])
+    group = db.get_group(gid)
+    subs = db.get_subscribers(gid)
+
+    if not subs:
+        await query.message.reply_text(f"📉 **{group['name']}** guruhida hali a'zolar yo'q.", parse_mode=ParseMode.MARKDOWN)
+        return
+
+    text = f"👥 **{group['name']}** guruhi a'zolari ({len(subs)} ta):\n\n"
+    for idx, uid in enumerate(subs, start=1):
+        text += f"{idx}. 👤 [Foydalanuvchi — {uid}](tg://user?id={uid})\n"
+
+    if len(text) > 4000:
+        for x in range(0, len(text), 4000):
+            await query.message.reply_text(text[x:x+4000], parse_mode=ParseMode.MARKDOWN)
+    else:
+        await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
 async def list_lessons_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -325,7 +348,7 @@ async def delete_lesson_callback(update: Update, context: ContextTypes.DEFAULT_T
     db.delete_lesson(lid)
     await query.edit_message_text("🗑 Dars o'chirildi.")
 
-# --- GROUP ANNOUNCEMENT (XATO TUZATILDI) ---
+# --- GROUP ANNOUNCEMENT ---
 async def start_group_announce(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -349,7 +372,6 @@ async def send_group_announce(update: Update, context: ContextTypes.DEFAULT_TYPE
         await msg.reply_text("❌ Guruh topilmadi.", reply_markup=main_menu_keyboard())
         return ConversationHandler.END
 
-    # MANA SHU YERDA BAZANGIZGA MOS TUSHUVCHI FUNKSIYANI ISHLATDIM
     subscribers = db.get_subscribers(gid)
 
     if not subscribers:
@@ -373,7 +395,7 @@ async def send_group_announce(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
     return ConversationHandler.END
 
-# --- SUPER ADMIN PANEL (QOTIB QOLISH TUZATILDI) ---
+# --- SUPER ADMIN PANEL ---
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if user.id != SUPER_ADMIN_ID:
@@ -386,7 +408,8 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📊 **Statistika:**\n"
         f"• Barcha obunachilar: **{total_users} ta**\n"
         f"• Jami guruhlar: **{total_groups} ta**\n"
-        f"• Faol darslar: **{total_lessons} ta**"
+        f"• Faol darslar: **{total_lessons} ta**\n\n"
+        f"⚠️ *Foydalanuvchini o'chirish (ban)* uchun botga:\n`/kick ID_RAQAM` deb yozing."
     )
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("👥 Barcha Obunachilar Ro'yxati", callback_data="get_all_subscribers")],
@@ -396,7 +419,6 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def admin_all_users_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    # "Yuklanmoqda..." xabari tugmani tezroq bo'shatadi
     await query.answer("⏳ Ro'yxat olinmoqda...")
 
     if query.from_user.id != SUPER_ADMIN_ID:
@@ -408,9 +430,6 @@ async def admin_all_users_callback(update: Update, context: ContextTypes.DEFAULT
         return
 
     text = f"👥 **Barcha Bot Obunachilari ({len(user_ids)} ta):**\n\n"
-    
-    # TELEGRAM API LIMITIGA URILMASLIK UCHUN get_chat() OLIB TASHLANDI.
-    # Uning o'rniga foydalanuvchi ustiga bossangiz profiliga o'tadigan link tayyorlandi.
     for idx, uid in enumerate(user_ids, start=1):
         text += f"{idx}. 👤 [Foydalanuvchi — {uid}](tg://user?id={uid})\n"
 
@@ -419,6 +438,20 @@ async def admin_all_users_callback(update: Update, context: ContextTypes.DEFAULT
             await query.message.reply_text(text[x:x+4000], parse_mode=ParseMode.MARKDOWN)
     else:
         await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+# --- YANGI QO'SHILDI: USERNI O'CHIRISH (KICK) ---
+async def admin_kick_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != SUPER_ADMIN_ID:
+        return
+    if not context.args:
+        await update.message.reply_text("⚠️ Foydalanish: `/kick 123456789` (Foydalanuvchi ID sini yozing)", parse_mode=ParseMode.MARKDOWN)
+        return
+    try:
+        uid = int(context.args[0])
+        db.delete_user_from_bot(uid)
+        await update.message.reply_text(f"✅ ID: `{uid}` bot bazasidan muvaffaqiyatli o'chirildi va guruhlardan chiqarildi.", parse_mode=ParseMode.MARKDOWN)
+    except ValueError:
+        await update.message.reply_text("❌ Noto'g'ri ID kiritildi. Faqat raqam kiriting.")
 
 # --- BROADCAST ---
 async def start_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -489,6 +522,9 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("admin", admin_panel))
+    
+    # YANGI KICK COMMAND (FAQAT ADMIN UCHUN)
+    app.add_handler(CommandHandler("kick", admin_kick_user))
 
     # Conversation Handlers
     app.add_handler(create_group_conv)
@@ -504,6 +540,9 @@ def main():
     # Aniq patternli Callback'lar
     app.add_handler(CallbackQueryHandler(admin_all_users_callback, pattern="^get_all_subscribers$"))
     app.add_handler(CallbackQueryHandler(ics_download_callback, pattern="^download_ics_"))
+    
+    # YANGI GURUH A'ZOLARI TUGMASI HANDLERI
+    app.add_handler(CallbackQueryHandler(group_members_callback, pattern="^groupmembers_"))
     
     # Qolgan general Callback Query'lar
     app.add_handler(CallbackQueryHandler(toggle_setting_callback, pattern="^toggle_"))
