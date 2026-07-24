@@ -70,6 +70,7 @@ def init_db():
                 rem_24h INTEGER DEFAULT 1,
                 rem_12h INTEGER DEFAULT 1,
                 rem_6h INTEGER DEFAULT 1,
+                rem_3h INTEGER DEFAULT 1,
                 rem_1h INTEGER DEFAULT 1,
                 rem_15m INTEGER DEFAULT 1,
                 rem_now INTEGER DEFAULT 1
