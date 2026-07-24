@@ -129,6 +129,7 @@ def generate_ics_calendar(group_name: str, lessons: list) -> io.BytesIO:
             f"DTEND:{dt_end_str}",
             f"UID:lesson_{l['id']}@darsbot",
             "BEGIN:VALARM\nACTION:DISPLAY\nDESCRIPTION:Darsga 1 kun qoldi!\nTRIGGER:-P1D\nEND:VALARM",
+            "BEGIN:VALARM\nACTION:DISPLAY\nDESCRIPTION:Darsga 3 soat qoldi!\nTRIGGER:-PT3H\nEND:VALARM",
             "BEGIN:VALARM\nACTION:DISPLAY\nDESCRIPTION:Darsga 1 soat qoldi!\nTRIGGER:-PT1H\nEND:VALARM",
             "BEGIN:VALARM\nACTION:DISPLAY\nDESCRIPTION:Darsga 15 daqiqa qoldi!\nTRIGGER:-PT15M\nEND:VALARM",
             "BEGIN:VALARM\nACTION:DISPLAY\nDESCRIPTION:Dars boshlandi!\nTRIGGER:PT0M\nEND:VALARM",
@@ -306,9 +307,9 @@ async def handle_group_linking(update: Update, context: ContextTypes.DEFAULT_TYP
             group_name = group['name'] if group else "Guruh"
             
             await message.reply_text(
-                f"✅ **Tabriklayman!**\n\n"
-                f"Bu Telegram guruh botdagi **\"{group_name}\"** jadvaliga muvaffaqiyatli ulandi! "
-                f"Endi dars vaqti kelganda eslatmalar shu yerga keladi.",
+                f"✅ **Muvaffaqiyatli ulandi!**\n\n"
+                f"Bu Telegram guruh 'Darslar Eslatma bot'dagi **\"{group_name}\"** guruhining jadvaliga muvaffaqiyatli ulandi! "
+                f"Endi dars vaqti yaqinlashganda va kelganda eslatmalar shu yerga keladi.",
                 parse_mode=ParseMode.MARKDOWN
             )
         except Exception as e:
@@ -477,7 +478,7 @@ async def group_manage_callback(update: Update, context: ContextTypes.DEFAULT_TY
             [InlineKeyboardButton("📋 Darslar Ro'yxati", callback_data=f"listlessons_{gid}")],
             [InlineKeyboardButton("👥 Guruh A'zolari", callback_data=f"groupmembers_{gid}")],
             [InlineKeyboardButton("📢 Guruhga E'lon Yuborish", callback_data=f"announcegroup_{gid}")],
-            [InlineKeyboardButton("🔗 Guruhni Telegram Guruhga Ulash", callback_data=f"linkgroup_{gid}")],
+            [InlineKeyboardButton("🔗 Botni Telegram Guruhga Ulash", callback_data=f"linkgroup_{gid}")],
             [InlineKeyboardButton("🗑 Guruhni O'chirish", callback_data=f"delgroup_{gid}")]
         ]
         await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(btns))
@@ -494,11 +495,11 @@ async def group_manage_callback(update: Update, context: ContextTypes.DEFAULT_TY
             group = db.get_group(gid)
         
             text = (
-                f"🔗 Guruhni real Telegram guruhga ulash uchun yo'riqnoma:\n\n"
+                f"🔗 Eslatuvchi botni real Telegram guruhga ulash uchun yo'riqnoma:\n\n"
                 f"1️⃣ Botimizni dars o'tadigan real Telegram guruhingizga qo'shing va **Administrator** huquqini bering.\n"
                 f"2️⃣ O'sha Telegram guruh ichiga kiring va ushbu buyruqni yuboring:\n\n"
                 f"👉 `/link_{gid}`\n\n"
-                f"Shundan so'ng bot avtomatik ravishda ushbu guruhni bog'lab oladi!"
+                f"Shundan so'ng bot avtomatik ravishda ushbu guruhni bog'lab oladi va faqat o'sha guruhga tegish bo'lgan eslatmalarni yuborib turadi!"
             )
             back_btn = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Orqaga", callback_data=f"managegroup_{gid}")]])
             await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=back_btn)
