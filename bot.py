@@ -57,7 +57,7 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
         
         diff_minutes = (dt_lesson - now).total_seconds() / 60.0
 
-        print(f"Dars: {l['title']} | Qolgan vaqt: {diff_minutes:.1f} minut")
+        print(f"Dars: {l['title']} | Qolgan vaqt: {diff_minutes:.1f} minut | Guruh chat_id: {group.get('chat_id')}")
         
         # ==========================================
         # 1-QISM: REAL TELEGRAM GURUHGA YUBORISH
