@@ -42,103 +42,107 @@ GROUP_ANNOUNCE_WAIT_MSG = 101
 
 # --- Background Reminder Checker ---
 async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
-    now = datetime.now(TZ)
-    lessons = db.get_all_future_lessons()
-    
-    for l in lessons:
-        lesson_id = l["id"]
-        group_id = l["group_id"]
-        group = db.get_group(group_id)
-        if not group:
-            continue
-            
-        dt_naive = datetime.strptime(l["start_time"], "%Y-%m-%d %H:%M:%S")
-        dt_lesson = TZ.localize(dt_naive)
+    try:
+        now = datetime.now(TZ)
+        lessons = db.get_all_future_lessons()
+        if not lessons:
+            return
         
-        diff_minutes = (dt_lesson - now).total_seconds() / 60.0
-
-        print(f"Dars: {l['title']} | Qolgan vaqt: {diff_minutes:.1f} minut | Guruh chat_id: {group.get('chat_id')}")
-        
-        # ==========================================
-        # 1-QISM: REAL TELEGRAM GURUHGA YUBORISH
-        # ==========================================
-        try:
-            chat_id = group.get('chat_id')
-        except Exception:
-            chat_id = None
-            
-        if chat_id:
-            async def send_group_reminder(r_type, text_prefix, title_prefix="🔔 **DARS ESLATMASI!**", include_link=False):
-                if not db.was_reminder_sent(lesson_id, chat_id, r_type):
-                    try:
-                        link_text = f"🔗 **Havola:** {l['meeting_link']}\n" if (include_link and l['meeting_link']) else ""
-                        msg = (
-                            f"{title_prefix}\n\n"
-                            f"📚 Guruh: **{group['name']}**\n"
-                            f"📖 Dars: **{l['title']}**\n"
-                            f"👤 Ustoz: {l['teacher']}\n"
-                            f"📅 Vaqti: {dt_naive.strftime('%d.%m.%Y %H:%M')}\n"
-                            f"{link_text}\n"
-                            f"*{text_prefix}*"
-                        )
-                        await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode=ParseMode.MARKDOWN)
-                        db.mark_reminder_sent(lesson_id, chat_id, r_type)
-                    except Exception as e:
-                        logging.error(f"Guruhga xabar yuborishda xatolik ({chat_id}): {e}")
-
-            # Guruh uchun eslatmalar: 3 soat, 1 soat, 15 daqiqa va hozir
-            if 175 <= diff_minutes <= 185:
-                await send_group_reminder("grp_3h", "Darsga 3 soat qoldi!", include_link=False)
-            elif 55 <= diff_minutes <= 65:
-                await send_group_reminder("grp_1h", "Darsga 1 soat qoldi!", include_link=False)
-            elif 12 <= diff_minutes <= 18:
-                await send_group_reminder("grp_15m", "Darsga 15 daqiqa qoldi!", include_link=True)
-            elif -2 <= diff_minutes <= 3:
-                await send_group_reminder("grp_now", "🔴 Dars boshlandi, darsga kiring!", title_prefix="🔴 **DARS BOSHLANDI!**", include_link=True)
-
-        # ==========================================
-        # 2-QISM: O'QUVCHILARGA SHAXSIY YUBORISH
-        # ==========================================
-        subscribers = db.get_subscribers(group_id)
-        for sub in subscribers:
-            user_id = sub["user_id"]
-            if user_id == 0:
-                continue
-            settings = db.get_user_settings(user_id)
-            
-            async def send_if_needed(r_type, text_prefix, title_prefix="🔔 **DARS ESLATMASI!**", include_link=False):
-                if not db.was_reminder_sent(lesson_id, user_id, r_type):
-                    try:
-                        link_text = f"🔗 **Havola:** {l['meeting_link']}\n" if (include_link and l['meeting_link']) else ""
-                        msg = (
-                            f"{title_prefix}\n\n"
-                            f"📚 Guruh: **{group['name']}**\n"
-                            f"📖 Dars: **{l['title']}**\n"
-                            f"👤 Ustoz: {l['teacher']}\n"
-                            f"📅 Vaqti: {dt_naive.strftime('%d.%m.%Y %H:%M')}\n"
-                            f"{link_text}\n"
-                            f"*{text_prefix}*"
-                        )
-                        await context.bot.send_message(chat_id=user_id, text=msg, parse_mode=ParseMode.MARKDOWN)
-                        db.mark_reminder_sent(lesson_id, user_id, r_type)
-                    except Exception as e:
-                        logging.error(f"Lichkaga yuborishda xatolik ({user_id}): {e}")
-
-            if settings.get("rem_24h", 1) == 1 and 1435 <= diff_minutes <= 1445:
-                await send_if_needed("24h", "Darsga 24 soat qoldi!", include_link=False)
-            elif settings.get("rem_12h", 1) == 1 and 715 <= diff_minutes <= 725:
-                await send_if_needed("12h", "Darsga 12 soat qoldi!", include_link=False)
-            elif settings.get("rem_6h", 1) == 1 and 355 <= diff_minutes <= 365:
-                await send_if_needed("6h", "Darsga 6 soat qoldi!", include_link=False)
-            elif settings.get("rem_3h", 1) == 1 and 175 <= diff_minutes <= 185:
-                await send_if_needed("3h", "Darsga 3 soat qoldi!", include_link=False)
-            elif settings.get("rem_1h", 1) == 1 and 55 <= diff_minutes <= 65:
-                await send_if_needed("1h", "Darsga 1 soat qoldi!", include_link=False)
-            elif settings.get("rem_15m", 1) == 1 and 12 <= diff_minutes <= 18:
-                await send_if_needed("15m", "Darsga 15 daqiqa qoldi!", include_link=True)
-            elif settings.get("rem_now", 1) == 1 and -2 <= diff_minutes <= 3:
-                await send_if_needed("now", "🔴 Dars boshlandi, darsga kiring!", title_prefix="🔴 **DARS BOSHLANDI!**", include_link=True)
+        for l in lessons:
+            try:
+                lesson_id = l["id"]
+                group_id = l["group_id"]
+                group = db.get_group(group_id)
+                if not group:
+                    continue
+                    
+                dt_naive = datetime.strptime(l["start_time"], "%Y-%m-%d %H:%M:%S")
+                dt_lesson = TZ.localize(dt_naive)
                 
+                diff_minutes = (dt_lesson - now).total_seconds() / 60.0
+                
+                # ==========================================
+                # 1-QISM: REAL TELEGRAM GURUHGA YUBORISH
+                # ==========================================
+                chat_id = group.get('chat_id') if isinstance(group, dict) else None
+                    
+                if chat_id:
+                    async def send_group_reminder(r_type, text_prefix, title_prefix="🔔 **DARS ESLATMASI!**", include_link=False):
+                        if not db.was_reminder_sent(lesson_id, chat_id, r_type):
+                            try:
+                                link_text = f"🔗 **Havola:** {l['meeting_link']}\n" if (include_link and l['meeting_link']) else ""
+                                msg = (
+                                    f"{title_prefix}\n\n"
+                                    f"📚 Guruh: **{group['name']}**\n"
+                                    f"📖 Dars: **{l['title']}**\n"
+                                    f"👤 Ustoz: {l['teacher']}\n"
+                                    f"📅 Vaqti: {dt_naive.strftime('%d.%m.%Y %H:%M')}\n"
+                                    f"{link_text}\n"
+                                    f"*{text_prefix}*"
+                                )
+                                await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode=ParseMode.MARKDOWN)
+                                db.mark_reminder_sent(lesson_id, chat_id, r_type)
+                            except Exception as e:
+                                logging.error(f"Guruhga xabar yuborishda xatolik ({chat_id}): {e}")
+
+                    if 175 <= diff_minutes <= 185:
+                        await send_group_reminder("grp_3h", "Darsga 3 soat qoldi!", include_link=False)
+                    elif 55 <= diff_minutes <= 65:
+                        await send_group_reminder("grp_1h", "Darsga 1 soat qoldi!", include_link=False)
+                    elif 12 <= diff_minutes <= 18:
+                        await send_group_reminder("grp_15m", "Darsga 15 daqiqa qoldi!", include_link=True)
+                    elif -2 <= diff_minutes <= 3:
+                        await send_group_reminder("grp_now", "🔴 Dars boshlandi, darsga kiring!", title_prefix="🔴 **DARS BOSHLANDI!**", include_link=True)
+
+                # ==========================================
+                # 2-QISM: O'QUVCHILARGA SHAXSIY YUBORISH
+                # ==========================================
+                subscribers = db.get_subscribers(group_id)
+                if subscribers:
+                    for sub in subscribers:
+                        user_id = sub["user_id"]
+                        if user_id == 0:
+                            continue
+                        settings = db.get_user_settings(user_id)
+                        if not settings:
+                            continue
+                        
+                        async def send_if_needed(r_type, text_prefix, title_prefix="🔔 **DARS ESLATMASI!**", include_link=False):
+                            if not db.was_reminder_sent(lesson_id, user_id, r_type):
+                                try:
+                                    link_text = f"🔗 **Havola:** {l['meeting_link']}\n" if (include_link and l['meeting_link']) else ""
+                                    msg = (
+                                        f"{title_prefix}\n\n"
+                                        f"📚 Guruh: **{group['name']}**\n"
+                                        f"📖 Dars: **{l['title']}**\n"
+                                        f"👤 Ustoz: {l['teacher']}\n"
+                                        f"📅 Vaqti: {dt_naive.strftime('%d.%m.%Y %H:%M')}\n"
+                                        f"{link_text}\n"
+                                        f"*{text_prefix}*"
+                                    )
+                                    await context.bot.send_message(chat_id=user_id, text=msg, parse_mode=ParseMode.MARKDOWN)
+                                    db.mark_reminder_sent(lesson_id, user_id, r_type)
+                                except Exception as e:
+                                    logging.error(f"Lichkaga yuborishda xatolik ({user_id}): {e}")
+
+                        if settings.get("rem_24h", 1) == 1 and 1435 <= diff_minutes <= 1445:
+                            await send_if_needed("24h", "Darsga 24 soat qoldi!", include_link=False)
+                        elif settings.get("rem_12h", 1) == 1 and 715 <= diff_minutes <= 725:
+                            await send_if_needed("12h", "Darsga 12 soat qoldi!", include_link=False)
+                        elif settings.get("rem_6h", 1) == 1 and 355 <= diff_minutes <= 365:
+                            await send_if_needed("6h", "Darsga 6 soat qoldi!", include_link=False)
+                        elif settings.get("rem_3h", 1) == 1 and 175 <= diff_minutes <= 185:
+                            await send_if_needed("3h", "Darsga 3 soat qoldi!", include_link=False)
+                        elif settings.get("rem_1h", 1) == 1 and 55 <= diff_minutes <= 65:
+                            await send_if_needed("1h", "Darsga 1 soat qoldi!", include_link=False)
+                        elif settings.get("rem_15m", 1) == 1 and 12 <= diff_minutes <= 18:
+                            await send_if_needed("15m", "Darsga 15 daqiqa qoldi!", include_link=True)
+                        elif settings.get("rem_now", 1) == 1 and -2 <= diff_minutes <= 3:
+                            await send_if_needed("now", "🔴 Dars boshlandi, darsga kiring!", title_prefix="🔴 **DARS BOSHLANDI!**", include_link=True)
+            except Exception as lesson_err:
+                logging.error(f"Darsni qayta ishlashda xatolik (ID: {l.get('id')}): {lesson_err}")
+    except Exception as e:
+        logging.error(f"check_reminders umumiy xatolik: {e}")
 # --- ICS Calendar Generator ---
 def generate_ics_calendar(group_name: str, lessons: list) -> io.BytesIO:
     ics_content = [
