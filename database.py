@@ -36,9 +36,16 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 invite_code TEXT UNIQUE NOT NULL,
-                owner_id INTEGER NOT NULL
+                owner_id INTEGER NOT NULL,
+                chat_id TEXT
             )
         """)
+        
+        try:
+            conn.execute("ALTER TABLE groups ADD COLUMN chat_id TEXT")
+        except Exception:
+            pass
+        
         conn.execute("""
             CREATE TABLE IF NOT EXISTS subscribers (
                 user_id INTEGER,
@@ -125,6 +132,10 @@ def delete_group(group_id: int):
         conn.execute("DELETE FROM subscribers WHERE group_id = ?", (group_id,))
         conn.execute("DELETE FROM lessons WHERE group_id = ?", (group_id,))
 
+def link_telegram_group(group_id: int, chat_id: str):
+    with get_db() as conn:
+        conn.execute("UPDATE groups SET chat_id = ? WHERE id = ?", (chat_id, group_id))
+        
 # --- Subscribers & Users ---
 def add_subscriber(user_id: int, group_id: int, full_name: str = ""):
     with get_db() as conn:
