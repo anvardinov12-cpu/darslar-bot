@@ -56,19 +56,57 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
         dt_lesson = TZ.localize(dt_naive)
         
         diff_minutes = (dt_lesson - now).total_seconds() / 60.0
-        subscribers = db.get_subscribers(group_id)
         
+        # ==========================================
+        # 1-QISM: REAL TELEGRAM GURUHGA YUBORISH
+        # ==========================================
+        try:
+            chat_id = group.get('chat_id')
+        except Exception:
+            chat_id = None
+            
+        if chat_id:
+            async def send_group_reminder(r_type, text_prefix, title_prefix="🔔 **DARS ESLATMASI!**", include_link=False):
+                if not db.was_reminder_sent(lesson_id, chat_id, r_type):
+                    try:
+                        link_text = f"🔗 **Havola:** {l['meeting_link']}\n" if (include_link and l['meeting_link']) else ""
+                        msg = (
+                            f"{title_prefix}\n\n"
+                            f"📚 Guruh: **{group['name']}**\n"
+                            f"📖 Dars: **{l['title']}**\n"
+                            f"👤 Ustoz: {l['teacher']}\n"
+                            f"📅 Vaqti: {dt_naive.strftime('%d.%m.%Y %H:%M')}\n"
+                            f"{link_text}\n"
+                            f"*{text_prefix}*"
+                        )
+                        await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode=ParseMode.MARKDOWN)
+                        db.mark_reminder_sent(lesson_id, chat_id, r_type)
+                    except Exception as e:
+                        logging.error(f"Guruhga xabar yuborishda xatolik ({chat_id}): {e}")
+
+            # Guruh uchun eslatmalar: 3 soat, 1 soat, 15 daqiqa va hozir
+            if 175 <= diff_minutes <= 185:
+                await send_group_reminder("grp_3h", "Darsga 3 soat qoldi!", include_link=False)
+            elif 55 <= diff_minutes <= 65:
+                await send_group_reminder("grp_1h", "Darsga 1 soat qoldi!", include_link=False)
+            elif 12 <= diff_minutes <= 18:
+                await send_group_reminder("grp_15m", "Darsga 15 daqiqa qoldi!", include_link=True)
+            elif -2 <= diff_minutes <= 3:
+                await send_group_reminder("grp_now", "🔴 Dars boshlandi, darsga kiring!", title_prefix="🔴 **DARS BOSHLANDI!**", include_link=True)
+
+        # ==========================================
+        # 2-QISM: O'QUVCHILARGA SHAXSIY YUBORISH
+        # ==========================================
+        subscribers = db.get_subscribers(group_id)
         for sub in subscribers:
             user_id = sub["user_id"]
             if user_id == 0:
                 continue
             settings = db.get_user_settings(user_id)
             
-            # --- O'ZGARGAN JOYI: include_link parametri qo'shildi ---
             async def send_if_needed(r_type, text_prefix, title_prefix="🔔 **DARS ESLATMASI!**", include_link=False):
                 if not db.was_reminder_sent(lesson_id, user_id, r_type):
                     try:
-                        # Havola faqat ruxsat berilgan eslatmalarda chiqadi
                         link_text = f"🔗 **Havola:** {l['meeting_link']}\n" if (include_link and l['meeting_link']) else ""
                         msg = (
                             f"{title_prefix}\n\n"
@@ -82,7 +120,7 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
                         await context.bot.send_message(chat_id=user_id, text=msg, parse_mode=ParseMode.MARKDOWN)
                         db.mark_reminder_sent(lesson_id, user_id, r_type)
                     except Exception as e:
-                        logging.error(f"Xabar yuborishda xatolik ({user_id}): {e}")
+                        logging.error(f"Lichkaga yuborishda xatolik ({user_id}): {e}")
 
             if settings.get("rem_24h", 1) == 1 and 1435 <= diff_minutes <= 1445:
                 await send_if_needed("24h", "Darsga 24 soat qoldi!", include_link=False)
@@ -90,14 +128,14 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
                 await send_if_needed("12h", "Darsga 12 soat qoldi!", include_link=False)
             elif settings.get("rem_6h", 1) == 1 and 355 <= diff_minutes <= 365:
                 await send_if_needed("6h", "Darsga 6 soat qoldi!", include_link=False)
+            elif settings.get("rem_3h", 1) == 1 and 175 <= diff_minutes <= 185:
+                await send_if_needed("3h", "Darsga 3 soat qoldi!", include_link=False)
             elif settings.get("rem_1h", 1) == 1 and 55 <= diff_minutes <= 65:
                 await send_if_needed("1h", "Darsga 1 soat qoldi!", include_link=False)
             elif settings.get("rem_15m", 1) == 1 and 12 <= diff_minutes <= 18:
-                # --- 15 daqiqalikda havola chiqadi ---
                 await send_if_needed("15m", "Darsga 15 daqiqa qoldi!", include_link=True)
             elif settings.get("rem_now", 1) == 1 and -2 <= diff_minutes <= 3:
-                # --- Dars boshlanganda havola chiqadi ---
-                await send_if_needed("now", "🔴 Dars boshlandi!", title_prefix="🔴 **DARS BOSHLANDI!**", include_link=True)
+                await send_if_needed("now", "🔴 Dars boshlandi, darsga kiring!", title_prefix="🔴 **DARS BOSHLANDI!**", include_link=True)
                 
 # --- ICS Calendar Generator ---
 def generate_ics_calendar(group_name: str, lessons: list) -> io.BytesIO:
@@ -546,12 +584,29 @@ async def group_manage_callback(update: Update, context: ContextTypes.DEFAULT_TY
             await query.message.reply_text(f"Xatolik: {e}")    
     
     elif data.startswith("unlinkgroup_"):
-        await query.answer()
         gid = int(data.split("_")[1])
-        db.unlink_telegram_group(gid)
-        await query.message.reply_text("✅ Telegram guruh bu dars jadvalidan uzib qo'yildi.")
         
-        # Keyin yana o'sha guruh menyusiga qaytarib yuborish mumkin  
+        # 1. Bazadan guruhni uzamiz
+        db.unlink_telegram_group(gid)
+        
+        # 2. Ekranda qisqa popup (qalqib chiquvchi) xabar ko'rsatamiz
+        await query.answer("✅ Telegram guruh muvaffaqiyatli uzildi!", show_alert=False)
+        
+        # 3. Menyuni "Ulanmagan" holatiga o'tkazib, xuddi shu xabarning o'zini yangilaymiz
+        group = db.get_group(gid)
+        invite_link = f"https://t.me/{bot.username}?start=g_{group['invite_code']}"
+        text = f"📌 **Guruh:** {group['name']}\n❌ Hali telegram guruhga ulanmagan\n🔗 **A'zolik havolasi:** `{invite_link}`"
+        
+        btns = [
+            [InlineKeyboardButton("➕ Dars Qo'shish", callback_data=f"addlesson_{gid}")],
+            [InlineKeyboardButton("📋 Darslar Ro'yxati", callback_data=f"listlessons_{gid}")],
+            [InlineKeyboardButton("👥 Guruh A'zolari", callback_data=f"groupmembers_{gid}")],
+            [InlineKeyboardButton("📢 Guruhga E'lon Yuborish", callback_data=f"announcegroup_{gid}")],
+            [InlineKeyboardButton("🔗 Guruhni Telegram Guruhga Ulash", callback_data=f"linkgroup_{gid}")],
+            [InlineKeyboardButton("🗑 Guruhni O'chirish", callback_data=f"confirmdel_{gid}")]
+        ]
+        
+        await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(btns))
 
 # --- Guruh a'zolarini ism bilan ko'rsatish ---
 async def group_members_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
