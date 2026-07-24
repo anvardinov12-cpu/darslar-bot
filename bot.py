@@ -278,7 +278,7 @@ async def start_add_lesson(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Link (agar yo'q bo'lsa '-')\n"
         "YYYY-MM-DD HH:MM\n"
         "```\n\n"
-        "Agar moslab yozishda qiyinchilikka uchrasangiz, formatni ko'chirib olib darslaringiz ro'yxati va formatni biror AI chatda yuboring, darslar orasiga `---` qo'yib shu formatga moslab berishini so'rang. 1-2 soniyada formatlab beradi, so'ng tayyor formatni shuyerga yuboring."
+        "Agar moslab yozishda qiyinchilikka uchrasangiz, formatni ko'chirib olib darslaringiz ro'yxati va formatni biror AI chatga yuboring, darslar orasiga `---` qo'yib shu formatga moslab berishini so'rang. 1-2 soniyada formatlab beradi, so'ng tayyor formatni shuyerga yuboring."
     )
     await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=cancel_keyboard)
     return WAIT_BULK_LESSONS
