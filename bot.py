@@ -199,7 +199,7 @@ async def show_guide(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📖 **BOTDAN FOYDALANISH YO'RIQNOMASI**\n\n"
         "Botimizdan quyidagi **2 xil yo'nalishda** foydalanishingiz mumkin:\n\n"
         "1️⃣ **Oddiy o'quvchi / Talaba uchun:**\n"
-        "• Ustozingiz yoki adminimiz bergan maxsus **havola (link)** ustiga bosing.\n"
+        "• Ustozingiz yoki adminingiz bergan maxsus **havola (link)** ustiga bosing.\n"
         "• Botga kirib guruhga avtomatik a'zo bo'lasiz.\n"
         "• Dars vaqti yaqinlashganda bot sizga eslatma va havolalarini yuborib turadi.\n"
         "• Agar biron guruh eslatmalari kerak bo'lmasa, menyudagi **'📋 Obunalarim'** bo'limiga kirib, o'sha guruhdan obunangizni osongina bekor qilishingiz mumkin.\n\n"
