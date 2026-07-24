@@ -56,6 +56,8 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
         dt_lesson = TZ.localize(dt_naive)
         
         diff_minutes = (dt_lesson - now).total_seconds() / 60.0
+
+        print(f"Dars: {l['title']} | Qolgan vaqt: {diff_minutes:.1f} minut")
         
         # ==========================================
         # 1-QISM: REAL TELEGRAM GURUHGA YUBORISH
