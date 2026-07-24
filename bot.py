@@ -272,7 +272,11 @@ async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ])
 
     if update.callback_query:
-        await update.callback_query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+        await update.callback_query.answer()
+        try:
+            await update.callback_query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+        except Exception:
+            pass
     else:
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
 
