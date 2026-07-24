@@ -145,7 +145,7 @@ def generate_ics_calendar(group_name: str, lessons: list) -> io.BytesIO:
 BTN_LESSONS = "📚 Mening Darslarim"
 BTN_SUBSCRIPTIONS = "📋 Obunalarim"
 BTN_SETTINGS = "⚙️ Eslatma Sozlamalari 🔔"
-BTN_CREATE_GROUP = "➕ Yangi Guruh Yaratish"
+BTN_CREATE_GROUP = "➕ Yangi Guruh Ochish"
 BTN_MANAGE_GROUPS = "📂 Guruhlarimni Boshqarish"
 BTN_GUIDE = "📖 Foydalanish tartibi"
 BTN_BACK = "⬅️ Orqaga"
@@ -175,7 +175,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"Dars eslatmalari darsingizdan 1 kun, 12, 6, 1 soat, 15 daqiqa avval va dars boshlanganida yuboriladi.\n\n"
                 f"---\n\n"
                 f"📌 **Botdan foydalanish tartibi:**\n"
-                f"1️⃣ **Eslatmalar:** Dars vaqti yaqinlashganda bot sizga avtomatik ravishda eslatma va Zoom havolalarini yuboradi.\n"
+                f"1️⃣ **Eslatmalar:** Dars vaqti yaqinlashganda bot sizga avtomatik ravishda eslatma va havolalarini yuboradi.\n"
                 f"2️⃣ **Sozlamalar:** Eslatma vaqtlarini o'zingizga moslash uchun menyudan foydalaning.\n"
                 f"3️⃣ **Guruhdan chiqish:** '📋 Obunalarim' bo'limidan istalgan vaqtda obunangizni bekor qilishingiz mumkin.",
                 parse_mode=ParseMode.MARKDOWN,
@@ -201,7 +201,7 @@ async def show_guide(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "1️⃣ **Oddiy o'quvchi / Talaba uchun:**\n"
         "• Ustozingiz yoki adminimiz bergan maxsus **havola (link)** ustiga bosing.\n"
         "• Botga kirib guruhga avtomatik a'zo bo'lasiz.\n"
-        "• Dars vaqti yaqinlashganda bot sizga eslatma va Zoom havolalarini yuborib turadi.\n"
+        "• Dars vaqti yaqinlashganda bot sizga eslatma va havolalarini yuborib turadi.\n"
         "• Agar biron guruh eslatmalari kerak bo'lmasa, menyudagi **'📋 Obunalarim'** bo'limiga kirib, o'sha guruhdan obunangizni osongina bekor qilishingiz mumkin.\n\n"
         "2️⃣ **Admin / O'qituvchi uchun:**\n"
         "• Menyudagi **'➕ Yangi Guruh Yaratish'** tugmasini bosib o'z dars guruhingizni oching.\n"
@@ -256,7 +256,7 @@ async def save_group_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
         group_name = update.message.text.strip()
         user_id = update.effective_user.id
         db.create_group(group_name, user_id)
-        await update.message.reply_text(f"✅ **{group_name}** guruhi yaratildi!", parse_mode=ParseMode.MARKDOWN, reply_markup=main_menu_keyboard())
+        await update.message.reply_text(f"✅ **{group_name}** guruhi ochildi!\n\n\"Guruhlarimni boshqarish\" menyusidan guruhingizga dars qo'shishingiz mumkin", parse_mode=ParseMode.MARKDOWN, reply_markup=main_menu_keyboard())
     except Exception as e:
         await update.message.reply_text(f"⚠️ Xatolik: `{e}`", reply_markup=main_menu_keyboard())
     return ConversationHandler.END
@@ -270,8 +270,15 @@ async def start_add_lesson(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = (
         "✍️ **Darslarni kiriting:**\n\n"
-        "Har bir dars orasiga **`---`** qo'ying.\n"
-        "Format:\n`Dars Nomi`\n`Ustoz`\n`Zoom Link (-)`\n`YYYY-MM-DD HH:MM`"
+        "Darslar qo'shilishi uchun ma'lumotlari quyidagi formatda yozilishi shart. Darslar bir nechta bo'lsa har bir dars orasiga **`---`** qo'ying.\n\n"
+        "Format:\n"
+        "```text\n"
+        "Dars Nomi\n"
+        "Ustoz\n"
+        "Link (agar yo'q bo'lsa '-')\n"
+        "YYYY-MM-DD HH:MM\n"
+        "```\n\n"
+        "Agar moslab yozishda qiyinchilikka uchrasangiz, formatni ko'chirib olib darslaringiz ro'yxati va formatni biror AI chatda yuboring, darslar orasiga `---` qo'yib shu formatga moslab berishini so'rang, 1-2 soniyada formatlab beradi. Tayyor formatni shuyerga yuboring."
     )
     await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=cancel_keyboard)
     return WAIT_BULK_LESSONS
