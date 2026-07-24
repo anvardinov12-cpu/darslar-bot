@@ -488,18 +488,22 @@ async def group_manage_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text("🗑 Guruh va undagi darslar o'chirildi.")
     
     elif data.startswith("linkgroup_"):
-        gid = int(data.split("_")[1])
-        group = db.get_group(gid)
-    
-        text = (
-            f"🔗 Guruhni real Telegram guruhga ulash uchun yo'riqnoma:\n\n"
-            f"1️⃣ Botimizni dars o'tadigan real Telegram guruhingizga qo'shing va **Administrator** huquqini bering.\n"
-            f"2️⃣ O'sha Telegram guruh ichiga kiring va ushbu buyruqni yuboring:\n\n"
-            f"👉 `/link_{gid}`\n\n"
-            f"Shundan so'ng bot avtomatik ravishda ushbu guruhni bog'lab oladi!"
-        )
-        back_btn = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Orqaga", callback_data=f"managegroup_{gid}")]])
-        await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=back_btn)    
+        await query.answer() # <-- TUGMA AYLANISHINI TO'XTATISH UCHUN SHU SHART
+        try:
+            gid = int(data.split("_")[1])
+            group = db.get_group(gid)
+        
+            text = (
+                f"🔗 Guruhni real Telegram guruhga ulash uchun yo'riqnoma:\n\n"
+                f"1️⃣ Botimizni dars o'tadigan real Telegram guruhingizga qo'shing va **Administrator** huquqini bering.\n"
+                f"2️⃣ O'sha Telegram guruh ichiga kiring va ushbu buyruqni yuboring:\n\n"
+                f"👉 `/link_{gid}`\n\n"
+                f"Shundan so'ng bot avtomatik ravishda ushbu guruhni bog'lab oladi!"
+            )
+            back_btn = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Orqaga", callback_data=f"managegroup_{gid}")]])
+            await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=back_btn)
+        except Exception as e:
+            await query.message.reply_text(f"Xatolik: {e}")    
         
 # --- Guruh a'zolarini ism bilan ko'rsatish ---
 async def group_members_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
