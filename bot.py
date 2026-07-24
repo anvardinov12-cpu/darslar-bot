@@ -259,8 +259,16 @@ async def show_guide(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- Settings ---
 async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    st = db.get_user_settings(user.id)
+    
+    # Xabarni o'chirish (chatni toza saqlash uchun)
+    if update.message:
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
 
+    st = db.get_user_settings(user.id)
+    
     def icon(val): return "✅" if val == 1 else "❌"
 
     text = "⚙️🔔 **Eslatma Sozlamalari**\n\nQaysi vaqtlarda sizga eslatma kelishini tanlang:"
