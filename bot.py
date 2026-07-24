@@ -204,7 +204,7 @@ async def show_guide(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• Dars vaqti yaqinlashganda bot sizga eslatma va havolalarini yuborib turadi.\n"
         "• Agar biron guruh eslatmalari kerak bo'lmasa, menyudagi **'📋 Obunalarim'** bo'limiga kirib, o'sha guruhdan obunangizni osongina bekor qilishingiz mumkin.\n\n"
         "2️⃣ **Admin / O'qituvchi uchun:**\n"
-        "• Menyudagi **'➕ Yangi Guruh Yaratish'** tugmasini bosib o'z dars guruhingizni oching.\n"
+        "• Menyudagi **'➕ Yangi Guruh Ochish'** tugmasini bosib o'z dars guruhingizni oching.\n"
         "• **'📂 Guruhlarimni Boshqarish'** bo'limi orqali guruhingizga darslarni qo'shing (ko'p darslarni shablon orqali bir yo'la kiritish mumkin).\n"
         "• Chiqqan **A'zolik havolasini** o'quvchilaringizga ulashing.\n"
         "• O'quvchilar shu havola orqali guruhga qo'shiladi, siz esa ularning ro'yxatini ko'rib, zarur paytda e'lonlar yubora olasiz!"
