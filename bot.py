@@ -472,21 +472,54 @@ async def group_manage_callback(update: Update, context: ContextTypes.DEFAULT_TY
         gid = int(data.split("_")[1])
         group = db.get_group(gid)
         invite_link = f"https://t.me/{bot.username}?start=g_{group['invite_code']}"
+
+        chat_id = group['chat_id'] if 'chat_id' in group.keys() else None
+        
+        if chat_id:
+            try:
+                # Bot ID orqali real guruh nomini oladi
+                chat_info = await context.bot.get_chat(chat_id)
+                status_text = f"✅ Ulangan telegram guruh: **{chat_info.title}**"
+            except Exception:
+                # Agar bot guruhdan chiqarib yuborilgan bo'lsa yoki ismini ololmasa:
+                status_text = f"✅ Ulangan telegram guruh ID: `{chat_id}` (bot guruhda yo'q)"
+        else:
+            status_text = "Hali telegram guruhga ulanmagan"
+        
+        chat_id = group['chat_id'] if 'chat_id' in group.keys() else None
+        status_text = f"✅ Ulangan telegram guruh ID: `{chat_id}`" if chat_id else "Hali telegram guruhga ulanmagan"
+        
         text = f"📌 **Guruh:** {group['name']}\n🔗 **A'zolik havolasi:** `{invite_link}`"
         btns = [
             [InlineKeyboardButton("➕ Dars Qo'shish", callback_data=f"addlesson_{gid}")],
             [InlineKeyboardButton("📋 Darslar Ro'yxati", callback_data=f"listlessons_{gid}")],
             [InlineKeyboardButton("👥 Guruh A'zolari", callback_data=f"groupmembers_{gid}")],
             [InlineKeyboardButton("📢 Guruhga E'lon Yuborish", callback_data=f"announcegroup_{gid}")],
-            [InlineKeyboardButton("🔗 Botni Telegram Guruhga Ulash", callback_data=f"linkgroup_{gid}")],
-            [InlineKeyboardButton("🗑 Guruhni O'chirish", callback_data=f"delgroup_{gid}")]
+            [InlineKeyboardButton("🔗 Guruhni Telegram Guruhga Ulash", callback_data=f"linkgroup_{gid}")]
         ]
+        
+        # Agar guruh allaqachon ulangan bo'lsa, uzish tugmasini ham qo'shamiz
+        if chat_id:
+            btns.append([InlineKeyboardButton("❌ Telegram Guruhni Uzish", callback_data=f"unlinkgroup_{gid}")])
+            
+        btns.append([InlineKeyboardButton("🗑 Guruhni O'chirish", callback_data=f"confirmdel_{gid}")])
+        
         await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(btns))
 
+    elif data.startswith("confirmdel_"):
+        gid = int(data.split("_")[1])
+        text = "⚠️ **Diqqat!**\n\nHaqiqatan ham bu guruhni va unga tegishli barcha darslarni o'chirib tashlamoqchimisiz?\n_Bu amalni ortga qaytarib bo'lmaydi!_"
+        
+        btns = [
+            [InlineKeyboardButton("🗑 Ha, o'chirish", callback_data=f"delgroup_{gid}")],
+            [InlineKeyboardButton("⬅️ Bekor qilish", callback_data=f"managegroup_{gid}")]
+        ]
+        await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(btns))
+        
     elif data.startswith("delgroup_"):
         gid = int(data.split("_")[1])
         db.delete_group(gid)
-        await query.edit_message_text("🗑 Guruh va undagi darslar o'chirildi.")
+        await query.edit_message_text("🗑 Guruh va undagi barcha darslar muvaffaqiyatli o'chirildi.")
     
     elif data.startswith("linkgroup_"):
         await query.answer() # <-- TUGMA AYLANISHINI TO'XTATISH UCHUN SHU SHART
@@ -770,6 +803,7 @@ def main():
     app.add_handler(CallbackQueryHandler(list_lessons_callback, pattern="^listlessons_"))
     app.add_handler(CallbackQueryHandler(delete_lesson_callback, pattern="^(delete_lesson_|dellesson_)"))
     app.add_handler(CallbackQueryHandler(group_manage_callback, pattern="^(managegroup_|delgroup_|linkgroup_)"))
+    app.add_handler(CallbackQueryHandler(group_manage_callback, pattern="^(managegroup_|delgroup_|linkgroup_|unlinkgroup_|confirmdel_)"))
     app.add_handler(CallbackQueryHandler(group_manage_callback, pattern="^(managegroup_|delgroup_)"))
 
     app.run_polling()
