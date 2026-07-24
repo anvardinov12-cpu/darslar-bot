@@ -283,6 +283,37 @@ async def start_add_lesson(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=cancel_keyboard)
     return WAIT_BULK_LESSONS
 
+# Real Telegram guruhdan turib /link_{id} yuborilganda ishlaydi
+async def handle_group_linking(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
+    if not message or not message.text:
+        return
+        
+    # Faqat guruh yoki superguruhlarda ishlashi uchun
+    if message.chat.type not in ["group", "supergroup"]:
+        return
+
+    text = message.text.strip()
+    if text.startswith("/link_"):
+        try:
+            group_id = int(text.split("_")[1])
+            tg_chat_id = str(message.chat.id)
+            
+            # Bazaga chat_id ni saqlaymiz
+            db.link_telegram_group(group_id, tg_chat_id)
+            
+            group = db.get_group(group_id)
+            group_name = group['name'] if group else "Guruh"
+            
+            await message.reply_text(
+                f"✅ **Tabriklayman!**\n\n"
+                f"Bu Telegram guruh botdagi **\"{group_name}\"** jadvaliga muvaffaqiyatli ulandi! "
+                f"Endi dars vaqti kelganda eslatmalar shu yerga keladi.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        except Exception as e:
+            await message.reply_text(f"❌ Xatolik yuz berdi: `{e}`", parse_mode=ParseMode.MARKDOWN)
+
 async def process_bulk_lessons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     raw_text = update.message.text.strip()
     gid = context.user_data.get("target_group_id")
@@ -442,10 +473,11 @@ async def group_manage_callback(update: Update, context: ContextTypes.DEFAULT_TY
         invite_link = f"https://t.me/{bot.username}?start=g_{group['invite_code']}"
         text = f"📌 **Guruh:** {group['name']}\n🔗 **A'zolik havolasi:** `{invite_link}`"
         btns = [
-            [InlineKeyboardButton("👥 Guruh A'zolari", callback_data=f"groupmembers_{gid}")],
             [InlineKeyboardButton("➕ Dars Qo'shish", callback_data=f"addlesson_{gid}")],
-            [InlineKeyboardButton("📢 Guruhga E'lon Yuborish", callback_data=f"announcegroup_{gid}")],
             [InlineKeyboardButton("📋 Darslar Ro'yxati", callback_data=f"listlessons_{gid}")],
+            [InlineKeyboardButton("👥 Guruh A'zolari", callback_data=f"groupmembers_{gid}")],
+            [InlineKeyboardButton("📢 Guruhga E'lon Yuborish", callback_data=f"announcegroup_{gid}")],
+            [InlineKeyboardButton("🔗 Guruhni Telegram Guruhga Ulash", callback_data=f"linkgroup_{gid}")],
             [InlineKeyboardButton("🗑 Guruhni O'chirish", callback_data=f"delgroup_{gid}")]
         ]
         await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(btns))
@@ -454,7 +486,21 @@ async def group_manage_callback(update: Update, context: ContextTypes.DEFAULT_TY
         gid = int(data.split("_")[1])
         db.delete_group(gid)
         await query.edit_message_text("🗑 Guruh va undagi darslar o'chirildi.")
-
+    
+    elif data.startswith("linkgroup_"):
+        gid = int(data.split("_")[1])
+        group = db.get_group(gid)
+    
+        text = (
+            f"🔗 Guruhni real Telegram guruhga ulash uchun yo'riqnoma:\n\n"
+            f"1️⃣ Botimizni dars o'tadigan real Telegram guruhingizga qo'shing va **Administrator** huquqini bering.\n"
+            f"2️⃣ O'sha Telegram guruh ichiga kiring va ushbu buyruqni yuboring:\n\n"
+            f"👉 `/link_{gid}`\n\n"
+            f"Shundan so'ng bot avtomatik ravishda ushbu guruhni bog'lab oladi!"
+        )
+        back_btn = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Orqaga", callback_data=f"managegroup_{gid}")]])
+        await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=back_btn)    
+        
 # --- Guruh a'zolarini ism bilan ko'rsatish ---
 async def group_members_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -696,6 +742,7 @@ def main():
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_SUBSCRIPTIONS}$"), show_user_subscriptions)) # <-- MANA BU QATORNI QO'SHING
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_SETTINGS}$"), show_settings))
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_CREATE_GROUP}$"), start_create_group))
+    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, handle_group_linking))
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_MANAGE_GROUPS}$"), show_managed_groups))
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_GUIDE}$"), show_guide)) # <-- MANA BU QATORNI HAM QO'SHING
 
