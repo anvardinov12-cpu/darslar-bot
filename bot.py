@@ -505,7 +505,15 @@ async def group_manage_callback(update: Update, context: ContextTypes.DEFAULT_TY
             await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=back_btn)
         except Exception as e:
             await query.message.reply_text(f"Xatolik: {e}")    
+    
+    elif data.startswith("unlinkgroup_"):
+        await query.answer()
+        gid = int(data.split("_")[1])
+        db.unlink_telegram_group(gid)
+        await query.message.reply_text("✅ Telegram guruh bu dars jadvalidan uzib qo'yildi.")
         
+        # Keyin yana o'sha guruh menyusiga qaytarib yuborish mumkin  
+
 # --- Guruh a'zolarini ism bilan ko'rsatish ---
 async def group_members_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
