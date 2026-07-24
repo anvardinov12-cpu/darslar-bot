@@ -473,7 +473,11 @@ async def group_manage_callback(update: Update, context: ContextTypes.DEFAULT_TY
         group = db.get_group(gid)
         invite_link = f"https://t.me/{bot.username}?start=g_{group['invite_code']}"
 
-        chat_id = group['chat_id'] if 'chat_id' in group.keys() else None
+        # Guruhda chat_id bormi-yo'qmi aniqlaymiz (xatolik bermasligi uchun try ishlatamiz)
+        try:
+            chat_id = group['chat_id']
+        except Exception:
+            chat_id = None
         
         if chat_id:
             try:
@@ -484,23 +488,25 @@ async def group_manage_callback(update: Update, context: ContextTypes.DEFAULT_TY
                 # Agar bot guruhdan chiqarib yuborilgan bo'lsa yoki ismini ololmasa:
                 status_text = f"✅ Ulangan telegram guruh ID: `{chat_id}` (bot guruhda yo'q)"
         else:
-            status_text = "Hali telegram guruhga ulanmagan"
+            status_text = "❌ Hali telegram guruhga ulanmagan"
         
-        chat_id = group['chat_id'] if 'chat_id' in group.keys() else None
-        status_text = f"✅ Ulangan telegram guruh ID: `{chat_id}`" if chat_id else "Hali telegram guruhga ulanmagan"
+        # STATUS TEXT MATN ICHIGA QO'SHILDI
+        text = f"📌 **Guruh:** {group['name']}\n{status_text}\n🔗 **A'zolik havolasi:** `{invite_link}`"
         
-        text = f"📌 **Guruh:** {group['name']}\n🔗 **A'zolik havolasi:** `{invite_link}`"
         btns = [
             [InlineKeyboardButton("➕ Dars Qo'shish", callback_data=f"addlesson_{gid}")],
             [InlineKeyboardButton("📋 Darslar Ro'yxati", callback_data=f"listlessons_{gid}")],
             [InlineKeyboardButton("👥 Guruh A'zolari", callback_data=f"groupmembers_{gid}")],
             [InlineKeyboardButton("📢 Guruhga E'lon Yuborish", callback_data=f"announcegroup_{gid}")],
-            [InlineKeyboardButton("🔗 Guruhni Telegram Guruhga Ulash", callback_data=f"linkgroup_{gid}")]
         ]
         
-        # Agar guruh allaqachon ulangan bo'lsa, uzish tugmasini ham qo'shamiz
+        # TUGMALAR SHARTGA KO'RA QO'SHILADI:
         if chat_id:
+            # Agar ulangan bo'lsa, faqat "Uzish" tugmasi chiqadi
             btns.append([InlineKeyboardButton("❌ Telegram Guruhni Uzish", callback_data=f"unlinkgroup_{gid}")])
+        else:
+            # Agar ulanmagan bo'lsa, faqat "Ulash" tugmasi chiqadi
+            btns.append([InlineKeyboardButton("🔗 Guruhni Telegram Guruhga Ulash", callback_data=f"linkgroup_{gid}")])
             
         btns.append([InlineKeyboardButton("🗑 Guruhni O'chirish", callback_data=f"confirmdel_{gid}")])
         
