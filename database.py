@@ -180,11 +180,22 @@ def get_user_settings(user_id: int):
 def toggle_user_setting(user_id: int, r_type: str):
     col = f"rem_{r_type}"
     curr = get_user_settings(user_id)
-    new_val = 0 if curr.get(col, 1) == 1 else 1
+    
+    # Agar foydalanuvchi bazada umuman yo'q bo'lsa, avval uni yaratib olamiz
+    if not curr:
+        with get_db() as conn:
+            conn.execute("INSERT OR IGNORE INTO user_settings (user_id) VALUES (?)", (user_id,))
+        curr = get_user_settings(user_id)
+        
+    current_val = curr.get(col, 1) if curr else 1
+    new_val = 0 if current_val == 1 else 1
+    
     with get_db() as conn:
         conn.execute(f"UPDATE user_settings SET {col} = ? WHERE user_id = ?", (new_val, user_id))
+        conn.commit()
+        
     return new_val
-
+    
 # --- Lessons ---
 def add_lesson(group_id: int, title: str, teacher: str, meeting_link: str, start_time_iso: str):
     with get_db() as conn:
