@@ -136,6 +136,10 @@ def link_telegram_group(group_id: int, chat_id: str):
     with get_db() as conn:
         conn.execute("UPDATE groups SET chat_id = ? WHERE id = ?", (chat_id, group_id))
         
+def unlink_telegram_group(group_id: int):
+    with get_db() as conn:
+        conn.execute("UPDATE groups SET chat_id = NULL WHERE id = ?", (group_id,))
+        
 # --- Subscribers & Users ---
 def add_subscriber(user_id: int, group_id: int, full_name: str = ""):
     with get_db() as conn:
