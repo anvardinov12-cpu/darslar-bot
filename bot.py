@@ -64,7 +64,7 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
                 # ==========================================
                 # 1-QISM: REAL TELEGRAM GURUHGA YUBORISH
                 # ==========================================
-                chat_id = group.get('chat_id') if isinstance(group, dict) else None
+                chat_id = group["chat_id"] if group else None
                     
                 if chat_id:
                     async def send_group_reminder(r_type, text_prefix, title_prefix="🔔 **DARS ESLATMASI!**", include_link=False):
