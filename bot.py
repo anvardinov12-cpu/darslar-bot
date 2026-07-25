@@ -201,6 +201,20 @@ BTN_MANAGE_GROUPS = "📂 Guruhlarimni Boshqarish"
 BTN_GUIDE = "📖 Foydalanish tartibi"
 BTN_BACK = "⬅️ Orqaga"
 
+def main_menu_keyboard():
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton(BTN_LESSONS), KeyboardButton(BTN_SUBSCRIPTIONS)],
+            [KeyboardButton(BTN_CREATE_GROUP), KeyboardButton(BTN_MANAGE_GROUPS)],
+            [KeyboardButton(BTN_SETTINGS), KeyboardButton(BTN_GUIDE)]
+        ],
+        resize_keyboard=True
+    )
+
+cancel_keyboard = ReplyKeyboardMarkup(
+    [[KeyboardButton(BTN_BACK)]],
+    resize_keyboard=True
+)
 
 # --- Start ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
