@@ -195,15 +195,6 @@ BTN_MANAGE_GROUPS = "📂 Guruhlarimni Boshqarish"
 BTN_GUIDE = "📖 Foydalanish tartibi"
 BTN_BACK = "⬅️ Orqaga"
 
-def main_menu_keyboard():
-    keyboard = [
-        [KeyboardButton(BTN_LESSONS), KeyboardButton(BTN_SUBSCRIPTIONS)],
-        [KeyboardButton(BTN_SETTINGS), KeyboardButton(BTN_CREATE_GROUP)],
-        [KeyboardButton(BTN_MANAGE_GROUPS), KeyboardButton(BTN_GUIDE)]
-    ]
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-
-cancel_keyboard = ReplyKeyboardMarkup([[KeyboardButton(BTN_BACK)]], resize_keyboard=True)
 
 # --- Start ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -258,28 +249,30 @@ async def show_guide(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Settings ---
 async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("1")
-
     user = update.effective_user
-
-    print("2")
-
-    if update.message:
-        try:
-            await update.message.delete()
-        except Exception as e:
-            print("DELETE:", e)
-
-    print("3")
-
     st = db.get_user_settings(user.id)
 
-    print("4", st)
+    def icon(val): return "✅" if val == 1 else "❌"
 
-    def icon(val):
-        return "✅" if val == 1 else "❌"
+    text = "⚙️🔔 **Eslatma Sozlamalari**\n\nQaysi vaqtlarda sizga eslatma kelishini tanlang:"
 
-    print("5")
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"{icon(st['rem_24h'])} 1 kun (24 soat) oldin", callback_data="toggle_24h")],
+        [InlineKeyboardButton(f"{icon(st['rem_12h'])} 12 soat oldin", callback_data="toggle_12h")],
+        [InlineKeyboardButton(f"{icon(st['rem_6h'])} 6 soat oldin", callback_data="toggle_6h")],
+        [InlineKeyboardButton(f"{icon(st['rem_1h'])} 1 soat oldin", callback_data="toggle_1h")],
+        [InlineKeyboardButton(f"{icon(st['rem_15m'])} 15 daqiqa oldin", callback_data="toggle_15m")],
+        [InlineKeyboardButton(f"{icon(st['rem_now'])} 🔴 Dars Boshlanganda", callback_data="toggle_now")]
+    ])
+
+    if update.callback_query:
+        await update.callback_query.answer()
+        try:
+            await update.callback_query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+        except Exception:
+            pass
+    else:
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
 
 async def toggle_setting_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -287,7 +280,7 @@ async def toggle_setting_callback(update: Update, context: ContextTypes.DEFAULT_
     r_type = query.data.replace("toggle_", "")
     db.toggle_user_setting(query.from_user.id, r_type)
     await show_settings(update, context)
-
+    
 # --- Create Group ---
 async def start_create_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("📝 Yangi guruh nomini kiriting:", reply_markup=cancel_keyboard)
