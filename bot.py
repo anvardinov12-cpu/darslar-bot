@@ -258,40 +258,28 @@ async def show_guide(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Settings ---
 async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("SHOW_SETTINGS START")
+    print("1")
+
     user = update.effective_user
-    
-    # Xabarni o'chirish (chatni toza saqlash uchun)
+
+    print("2")
+
     if update.message:
         try:
             await update.message.delete()
-        except Exception:
-            pass
+        except Exception as e:
+            print("DELETE:", e)
+
+    print("3")
 
     st = db.get_user_settings(user.id)
-    
-    def icon(val): return "✅" if val == 1 else "❌"
 
-    text = "⚙️🔔 **Eslatma Sozlamalari**\n\nQaysi vaqtlarda sizga eslatma kelishini tanlang:"
+    print("4", st)
 
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton(f"{icon(st['rem_24h'])} 1 kun (24 soat) oldin", callback_data="toggle_24h")],
-        [InlineKeyboardButton(f"{icon(st['rem_12h'])} 12 soat oldin", callback_data="toggle_12h")],
-        [InlineKeyboardButton(f"{icon(st['rem_6h'])} 6 soat oldin", callback_data="toggle_6h")],
-        [InlineKeyboardButton(f"{icon(st['rem_3h'])} 3 soat oldin", callback_data="toggle_3h")],
-        [InlineKeyboardButton(f"{icon(st['rem_1h'])} 1 soat oldin", callback_data="toggle_1h")],
-        [InlineKeyboardButton(f"{icon(st['rem_15m'])} 15 daqiqa oldin", callback_data="toggle_15m")],
-        [InlineKeyboardButton(f"{icon(st['rem_now'])} 🔴 Dars Boshlanganda", callback_data="toggle_now")]
-    ])
+    def icon(val):
+        return "✅" if val == 1 else "❌"
 
-    if update.callback_query:
-        await update.callback_query.answer()
-        try:
-            await update.callback_query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
-        except Exception:
-            pass
-    else:
-        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+    print("5")
 
 async def toggle_setting_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
