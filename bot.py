@@ -258,6 +258,7 @@ async def show_guide(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Settings ---
 async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("SHOW_SETTINGS START")
     user = update.effective_user
     
     # Xabarni o'chirish (chatni toza saqlash uchun)
