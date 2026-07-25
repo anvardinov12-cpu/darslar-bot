@@ -280,6 +280,7 @@ async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton(f"{icon(st['rem_24h'])} 1 kun (24 soat) oldin", callback_data="toggle_24h")],
         [InlineKeyboardButton(f"{icon(st['rem_12h'])} 12 soat oldin", callback_data="toggle_12h")],
         [InlineKeyboardButton(f"{icon(st['rem_6h'])} 6 soat oldin", callback_data="toggle_6h")],
+        [InlineKeyboardButton(f"{icon(st['rem_3h'])} 3 soat oldin", callback_data="toggle_3h")],
         [InlineKeyboardButton(f"{icon(st['rem_1h'])} 1 soat oldin", callback_data="toggle_1h")],
         [InlineKeyboardButton(f"{icon(st['rem_15m'])} 15 daqiqa oldin", callback_data="toggle_15m")],
         [InlineKeyboardButton(f"{icon(st['rem_now'])} 🔴 Dars Boshlanganda", callback_data="toggle_now")]
@@ -709,6 +710,7 @@ async def send_group_announce(update: Update, context: ContextTypes.DEFAULT_TYPE
     sent_count, failed_count = 0, 0
     announce_text = f"📢 **E'LON [{group['name']}]**\n\n{msg.text}"
 
+    # 1. Obunachilarning shaxsiy chatiga (lichkasiga) yuborish
     for u_info in subscribers:
         u_id = u_info["user_id"]
         try:
@@ -717,13 +719,21 @@ async def send_group_announce(update: Update, context: ContextTypes.DEFAULT_TYPE
         except Exception:
             failed_count += 1
 
+    # 2. Agar real Telegram guruh ulangan bo'lsa, o'sha guruhga ham yuborish
+    if group.get('chat_id'):
+        try:
+            await context.bot.send_message(chat_id=group['chat_id'], text=announce_text, parse_mode=ParseMode.MARKDOWN)
+        except Exception:
+            pass
+
+    # 3. Natijani chiqarish va jarayonni tugatish
     await msg.reply_text(
         f"✅ **E'lon yuborildi!**\n\n📥 Yetib bordi: **{sent_count}** ta\n❌ Yetib bormadi: **{failed_count}** ta",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=main_menu_keyboard()
     )
     return ConversationHandler.END
-
+    
 # --- SUPER ADMIN PANEL ---
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
