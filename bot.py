@@ -156,7 +156,13 @@ def generate_ics_calendar(group_name: str, lessons: list) -> io.BytesIO:
 
     for l in lessons:
         dt_naive = datetime.strptime(l["start_time"], "%Y-%m-%d %H:%M:%S")
-        dt_utc = dt_naive - timedelta(hours=5)
+        
+        # 1. Vaqtni Toshkent vaqti (TZ) deb belgilaymiz
+        dt_local = TZ.localize(dt_naive)
+        
+        # 2. Xalqaro UTC vaqtiga avtomatik o'giramiz (astimezone)
+        dt_utc = dt_local.astimezone(pytz.utc) 
+        
         dt_start_str = dt_utc.strftime("%Y%m%dT%H%M%SZ")
         dt_end_str = (dt_utc + timedelta(hours=1, minutes=30)).strftime("%Y%m%dT%H%M%SZ")
 
