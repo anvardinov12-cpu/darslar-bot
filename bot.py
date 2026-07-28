@@ -723,10 +723,12 @@ async def send_group_announce(update: Update, context: ContextTypes.DEFAULT_TYPE
     group_sent = False
     if group.get('chat_id'):
         try:
+            print(f"Guruhga yuborishga harakat qilinmoqda. Chat ID: {group['chat_id']}")
             await context.bot.send_message(chat_id=group['chat_id'], text=announce_text, parse_mode=ParseMode.MARKDOWN)
             group_sent = True
-        except Exception:
-            pass
+            print("Guruhga muvaffaqiyatli bordi!")
+        except Exception as e:
+            print(f"GURUHGAGA YUBORISHDA XATOLIK CHIQDI: {e}") # <--- Xatolikni terminalga chiqaramiz
 
     # 3. Adminga yakuniy hisobotni chiqarish (Faqat adminga yuboriladi)
     report_text = f"✅ **E'lon yuborildi!**\n\n"
