@@ -707,9 +707,10 @@ async def send_group_announce(update: Update, context: ContextTypes.DEFAULT_TYPE
         return ConversationHandler.END
 
     sent_count, failed_count = 0, 0
+    # O'quvchilar va shaxsiy chatga yuboriladigan e'lon matni
     announce_text = f"📢 **E'LON [{group['name']}]**\n\n{msg.text}"
 
-    # 1. Obunachilarning shaxsiy chatiga (lichkasiga) yuborish
+    # 1. Obunachilarning shaxsiy chatiga (lichkasiga) yuborish va sanash
     for u_info in subscribers:
         u_id = u_info["user_id"]
         try:
@@ -719,18 +720,24 @@ async def send_group_announce(update: Update, context: ContextTypes.DEFAULT_TYPE
             failed_count += 1
 
     # 2. Agar real Telegram guruh ulangan bo'lsa, o'sha guruhga ham yuborish
+    group_sent = False
     if group.get('chat_id'):
         try:
             await context.bot.send_message(chat_id=group['chat_id'], text=announce_text, parse_mode=ParseMode.MARKDOWN)
+            group_sent = True
         except Exception:
             pass
 
-    # 3. Natijani chiqarish va jarayonni tugatish
-    await msg.reply_text(
-        f"✅ **E'lon yuborildi!**\n\n📥 Yetib bordi: **{sent_count}** ta\n❌ Yetib bormadi: **{failed_count}** ta",
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=main_menu_keyboard()
-    )
+    # 3. Adminga yakuniy hisobotni chiqarish (Faqat adminga yuboriladi)
+    report_text = f"✅ **E'lon yuborildi!**\n\n"
+    report_text += f"📥 Shaxsiy chatlarga: **{sent_count}** ta\n"
+    report_text += f"❌ Yetib bormadi: **{failed_count}** ta\n"
+    
+    if group.get('chat_id'):
+        status_g = "Muvaffaqiyatli 🟢" if group_sent else "Yuborib bo'lmadi 🔴 (Bot guruhda yo'q yoki huquqi yo'q)"
+        report_text += f"👥 Real Telegram guruhga: {status_g}"
+
+    await msg.reply_text(report_text, parse_mode=ParseMode.MARKDOWN, reply_markup=main_menu_keyboard())
     return ConversationHandler.END
     
 # --- SUPER ADMIN PANEL ---
