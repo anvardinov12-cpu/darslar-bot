@@ -599,7 +599,7 @@ async def group_manage_callback(update: Update, context: ContextTypes.DEFAULT_TY
             group = db.get_group(gid)
             
             # Agar guruhda token hali bo'lmasa (eski guruhlar uchun), uni yaratib qo'yamiz
-            token = group.get('secret_token')
+            token = group['secret_token'] if 'secret_token' in group.keys() and group['secret_token'] else None
             if not token:
                 import secrets
                 token = secrets.token_hex(6)
