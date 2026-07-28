@@ -658,20 +658,30 @@ async def group_members_callback(update: Update, context: ContextTypes.DEFAULT_T
     subs = db.get_subscribers(gid)
 
     if not subs:
-        await query.message.reply_text(f"📉 **{group['name']}** guruhida hali a'zolar yo'q.", parse_mode=ParseMode.MARKDOWN)
+        # Bu yerda ham HTML ga o'tkazdik
+        await query.message.reply_text(f"📉 <b>{group['name']}</b> guruhida hali a'zolar yo'q.", parse_mode=ParseMode.HTML)
         return
 
-    text = f"👥 <b>{group['name']}</b> guruhi a'zolari ({len(subs)} ta):\n\n"
+    # Sarlavhani tayyorlab olamiz
+    header = f"👥 <b>{group['name']}</b> guruhi a'zolari ({len(subs)} ta):\n\n"
+    text = header
+
     for idx, user_info in enumerate(subs, start=1):
         uid = user_info["user_id"]
         name = user_info["full_name"]
-        safe_name = html.escape(name) # Ismni HTML xavfsiz holatga keltiramiz
-        text += f"{idx}. 👤 <a href='tg://user?id={uid}'>{safe_name}</a> (ID: <code>{uid}</code>)\n"
+        safe_name = html.escape(name)
+        line = f"{idx}. 👤 <a href='tg://user?id={uid}'>{safe_name}</a> (ID: <code>{uid}</code>)\n"
 
-    if len(text) > 4000:
-        for x in range(0, len(text), 4000):
-            await query.message.reply_text(text[x:x+4000], parse_mode=ParseMode.HTML)
-    else:
+        # Agar matn 4000 belgidan oshib ketsa, oldingi qismni yuborib, 
+        # yangi xabarni sarlavhadan boshlab yig'amiz (teglar kesilmaydi)
+        if len(text) + len(line) > 4000:
+            await query.message.reply_text(text, parse_mode=ParseMode.HTML)
+            text = header
+
+        text += line
+
+    # Qolgan oxirgi qismni yuboramiz
+    if text:
         await query.message.reply_text(text, parse_mode=ParseMode.HTML)
 
 async def list_lessons_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -802,17 +812,26 @@ async def admin_all_users_callback(update: Update, context: ContextTypes.DEFAULT
         await query.message.reply_text("Obunachilar topilmadi.")
         return
 
-    text = f"👥 <b>Barcha Bot Obunachilari ({len(users_list)} ta):</b>\n\n"
+    # Sarlavhadan boshlaymiz
+    header = f"👥 <b>Barcha Bot Obunachilari ({len(users_list)} ta):</b>\n\n"
+    text = header
+    
     for idx, u in enumerate(users_list, start=1):
         uid = u["user_id"]
         name = u["full_name"]
-        safe_name = html.escape(name) # Ismni HTML xavfsiz holatga keltiramiz
-        text += f"{idx}. 👤 <a href='tg://user?id={uid}'>{safe_name}</a> (ID: <code>{uid}</code>)\n"
+        safe_name = html.escape(name)
+        line = f"{idx}. 👤 <a href='tg://user?id={uid}'>{safe_name}</a> (ID: <code>{uid}</code>)\n"
+        
+        # Agar yangi qatorni qo'shganda matn 4000 belgidan oshib ketsa, 
+        # oldingi qismni yuborib, yangi xabar yig'ishni boshlaymiz (teglarni kesib yubormaslik uchun)
+        if len(text) + len(line) > 4000:
+            await query.message.reply_text(text, parse_mode=ParseMode.HTML)
+            text = header  # Yangi xabarga ham sarlavhani qo'yamiz
+            
+        text += line
 
-    if len(text) > 4000:
-        for x in range(0, len(text), 4000):
-            await query.message.reply_text(text[x:x+4000], parse_mode=ParseMode.HTML)
-    else:
+    # Qolgan oxirgi qismni yuboramiz
+    if text:
         await query.message.reply_text(text, parse_mode=ParseMode.HTML)
 
 async def admin_kick_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
