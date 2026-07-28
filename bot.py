@@ -762,9 +762,15 @@ async def send_group_announce(update: Update, context: ContextTypes.DEFAULT_TYPE
     
 # --- SUPER ADMIN PANEL ---
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
+    
+    # Guruh yoki superguruhdan yozilsa, umuman javob bermaymiz
+    if message.chat.type in ["group", "supergroup"]:
+        return
+
     user = update.effective_user
     if user.id != SUPER_ADMIN_ID:
-        await update.message.reply_text("⛔️ Ushbu bo'lim faqat Bosh Admin uchun!")
+        await message.reply_text("⛔️ Ushbu bo'lim faqat Bosh Admin uchun!")
         return
 
     total_users, total_groups, total_lessons = db.get_total_stats()
@@ -780,7 +786,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("👥 Barcha Obunachilar Ro'yxati", callback_data="get_all_subscribers")],
         [InlineKeyboardButton("📢 Xabar tarqatish", callback_data="admin_broadcast")]
     ])
-    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+    await message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
 
 async def admin_all_users_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
