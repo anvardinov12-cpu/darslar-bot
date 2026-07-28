@@ -706,76 +706,51 @@ async def start_group_announce(update: Update, context: ContextTypes.DEFAULT_TYP
     return GROUP_ANNOUNCE_WAIT_MSG
 
 async def send_group_announce(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("--- SEND_GROUP_ANNOUNCE FUNKSIYASI ISHLADI ---") # <--- Shuni qo'shing
     msg = update.message
     gid = context.user_data.get("announce_gid")
-    print(f"GURUH ID: {gid}") # <--- Bazadan qaysi ID olinganini ko'ramiz
     
     group = db.get_group(gid)
-    print(f"TOPILGAN GURUH: {group}") # <--- Guruh bazada bormi yo'qmi ko'ramiz
-    
     if not group:
         await msg.reply_text("❌ Guruh topilmadi.", reply_markup=main_menu_keyboard())
         return ConversationHandler.END
 
     subscribers = db.get_subscribers(gid)
-    print(f"OBUNACHILAR SONI: {len(subscribers) if subscribers else 0}")
-
-    if not subscribers:
-        await msg.reply_text("❌ Ushbu guruhda a'zolar yo'q.", reply_markup=main_menu_keyboard())
+    if not subscribers and not group.get('chat_id'):
+        await msg.reply_text("❌ Ushbu guruhda na a'zolar va na ulangan Telegram guruh bor.", reply_markup=main_menu_keyboard())
         return ConversationHandler.END
 
     sent_count, failed_count = 0, 0
     announce_text = f"📢 **E'LON [{group['name']}]**\n\n{msg.text}"
 
-    for u_info in subscribers:
-        u_id = u_info["user_id"]
-        try:
-            await context.bot.send_message(chat_id=u_id, text=announce_text, parse_mode=ParseMode.MARKDOWN)
-            sent_count += 1
-        except Exception:
-            failed_count += 1
+    # 1. Shaxsiy chatlarga yuborish
+    if subscribers:
+        for u_info in subscribers:
+            u_id = u_info["user_id"]
+            try:
+                await context.bot.send_message(chat_id=u_id, text=announce_text, parse_mode=ParseMode.MARKDOWN)
+                sent_count += 1
+            except Exception:
+                failed_count += 1
 
+    # 2. Ulangan real Telegram guruhga yuborish
     group_sent = False
-    if group.get('chat_id'):
+    chat_id = group['chat_id'] if 'chat_id' in group.keys() else None
+    
+    if chat_id:
         try:
-            print(f"Real guruhga yuborilmoqda. Chat ID: {group['chat_id']}")
-            await context.bot.send_message(chat_id=group['chat_id'], text=announce_text, parse_mode=ParseMode.MARKDOWN)
+            await context.bot.send_message(chat_id=chat_id, text=announce_text, parse_mode=ParseMode.MARKDOWN)
             group_sent = True
-            print("Real guruhga yuborildi!")
         except Exception as e:
-            print(f"REAL GURUHGA YUBORISH XATosi: {e}")
+            print(f"Real guruhga e'lon yuborishda xatolik: {e}")
 
+    # 3. Adminga yakuniy hisobotni chiqarish
     report_text = f"✅ **E'lon yuborildi!**\n\n"
     report_text += f"📥 Shaxsiy chatlarga: **{sent_count}** ta\n"
-    report_text += f"❌ Yetib bormadi: **{failed_count}** ta\n"
+    report_text += f"❌ Yetib bormadi: **{failed_count}** ta"
     
-    if group.get('chat_id'):
-        status_g = "Muvaffaqiyatli 🟢" if group_sent else "Yuborib bo'lmadi 🔴"
-        report_text += f"\n👥 Real Telegram guruhga: {status_g}"
-
-    await msg.reply_text(report_text, parse_mode=ParseMode.MARKDOWN, reply_markup=main_menu_keyboard())
-    return ConversationHandler.END
-
-    # 2. Agar real Telegram guruh ulangan bo'lsa, o'sha guruhga ham yuborish
-    group_sent = False
-    if group.get('chat_id'):
-        try:
-            print(f"Guruhga yuborishga harakat qilinmoqda. Chat ID: {group['chat_id']}")
-            await context.bot.send_message(chat_id=group['chat_id'], text=announce_text, parse_mode=ParseMode.MARKDOWN)
-            group_sent = True
-            print("Guruhga muvaffaqiyatli bordi!")
-        except Exception as e:
-            print(f"GURUHGAGA YUBORISHDA XATOLIK CHIQDI: {e}") # <--- Xatolikni terminalga chiqaramiz
-
-    # 3. Adminga yakuniy hisobotni chiqarish (Faqat adminga yuboriladi)
-    report_text = f"✅ **E'lon yuborildi!**\n\n"
-    report_text += f"📥 Shaxsiy chatlarga: **{sent_count}** ta\n"
-    report_text += f"❌ Yetib bormadi: **{failed_count}** ta\n"
-    
-    if group.get('chat_id'):
+    if chat_id:
         status_g = "Muvaffaqiyatli 🟢" if group_sent else "Yuborib bo'lmadi 🔴 (Bot guruhda yo'q yoki huquqi yo'q)"
-        report_text += f"👥 Real Telegram guruhga: {status_g}"
+        report_text += f"\n👥 Real Telegram guruhga: {status_g}"
 
     await msg.reply_text(report_text, parse_mode=ParseMode.MARKDOWN, reply_markup=main_menu_keyboard())
     return ConversationHandler.END
