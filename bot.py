@@ -661,7 +661,7 @@ async def group_members_callback(update: Update, context: ContextTypes.DEFAULT_T
         await query.message.reply_text(f"📉 **{group['name']}** guruhida hali a'zolar yo'q.", parse_mode=ParseMode.MARKDOWN)
         return
 
-    text = f"👥 **{group['name']}** guruhi a'zolari ({len(subs)} ta):\n\n"
+    text = f"👥 <b>{group['name']}</b> guruhi a'zolari ({len(subs)} ta):\n\n"
     for idx, user_info in enumerate(subs, start=1):
         uid = user_info["user_id"]
         name = user_info["full_name"]
@@ -802,7 +802,7 @@ async def admin_all_users_callback(update: Update, context: ContextTypes.DEFAULT
         await query.message.reply_text("Obunachilar topilmadi.")
         return
 
-    text = f"👥 **Barcha Bot Obunachilari ({len(users_list)} ta):**\n\n"
+    text = f"👥 <b>Barcha Bot Obunachilari ({len(users_list)} ta):</b>\n\n"
     for idx, u in enumerate(users_list, start=1):
         uid = u["user_id"]
         name = u["full_name"]
