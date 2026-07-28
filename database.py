@@ -37,9 +37,16 @@ def init_db():
                 name TEXT NOT NULL,
                 invite_code TEXT UNIQUE NOT NULL,
                 owner_id INTEGER NOT NULL,
-                chat_id TEXT
+                chat_id TEXT,
+                secret_token TEXT UNIQUE
             )
         """)
+        
+        # <--- O'ZGARISH 1: secret_token ustuni bazada yo'q bo'lsa, xatolik bermasdan qo'shish uchun
+        try:
+            conn.execute("ALTER TABLE groups ADD COLUMN secret_token TEXT")
+        except Exception:
+            pass
         
         try:
             conn.execute("ALTER TABLE groups ADD COLUMN chat_id TEXT")
@@ -94,19 +101,21 @@ def init_db():
                 PRIMARY KEY (lesson_id, user_id, reminder_type)
             )
         """)
-
+        
 # --- Groups ---
 def create_group(name: str, owner_id: int):
     code = secrets.token_urlsafe(5).replace("-", "").replace("_", "")[:8]
+    secret_token = secrets.token_hex(6) # <--- Yangi guruh uchun 12 xonali maxfiy kalit yaratamiz
+    
     with get_db() as conn:
         cur = conn.execute(
-            "INSERT INTO groups (name, invite_code, owner_id) VALUES (?, ?, ?)",
-            (name, code, owner_id)
+            "INSERT INTO groups (name, invite_code, owner_id, secret_token) VALUES (?, ?, ?, ?)", # <--- secret_token qo'shildi
+            (name, code, owner_id, secret_token) # <--- secret_token qiymati berildi
         )
         group_id = cur.lastrowid
         conn.execute("INSERT OR IGNORE INTO subscribers (user_id, group_id) VALUES (?, ?)", (owner_id, group_id))
         return conn.execute("SELECT * FROM groups WHERE id = ?", (group_id,)).fetchone()
-
+        
 def get_user_owned_groups(owner_id: int):
     with get_db() as conn:
         return conn.execute("SELECT * FROM groups WHERE owner_id = ?", (owner_id,)).fetchall()
@@ -123,6 +132,10 @@ def get_group(group_id: int):
     with get_db() as conn:
         return conn.execute("SELECT * FROM groups WHERE id = ?", (group_id,)).fetchone()
 
+def get_group_by_secret_token(token: str):
+    with get_db() as conn:
+        return conn.execute("SELECT * FROM groups WHERE secret_token = ?", (token,)).fetchone()
+        
 def get_group_by_code(code: str):
     with get_db() as conn:
         return conn.execute("SELECT * FROM groups WHERE invite_code = ?", (code,)).fetchone()
