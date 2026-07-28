@@ -607,9 +607,9 @@ async def group_manage_callback(update: Update, context: ContextTypes.DEFAULT_TY
                     conn.execute("UPDATE groups SET secret_token = ? WHERE id = ?", (token, gid))
         
             text = (
-                f"🔗 Eslatuvchi botni real Telegram guruhga ulash uchun yo'riqnoma:\n\n"
+                f"🔗 Eslatuvchi botni Telegram guruhga ulash uchun yo'riqnoma:\n\n"
                 f"1️⃣ Botimizni dars o'tadigan real Telegram guruhingizga qo'shing va **Administrator** huquqini bering.\n"
-                f"2️⃣ O'sha Telegram guruh ichiga kiring va ushbu buyruqni yuboring:\n\n"
+                f"2️⃣ O'sha Telegram guruh ichiga kiring va ushbu linkni yuboring:\n\n"
                 f"👉 `/link_{token}`\n\n"
                 f"Shundan so'ng bot avtomatik ravishda ushbu guruhni xavfsiz bog'lab oladi!"
             )
@@ -745,12 +745,12 @@ async def send_group_announce(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     # 3. Adminga yakuniy hisobotni chiqarish
     report_text = f"✅ **E'lon yuborildi!**\n\n"
-    report_text += f"📥 Shaxsiy chatlarga: **{sent_count}** ta\n"
+    report_text += f"📥 Obunachilarga: **{sent_count}** ta\n"
     report_text += f"❌ Yetib bormadi: **{failed_count}** ta"
     
     if chat_id:
         status_g = "Muvaffaqiyatli 🟢" if group_sent else "Yuborib bo'lmadi 🔴 (Bot guruhda yo'q yoki huquqi yo'q)"
-        report_text += f"\n👥 Real Telegram guruhga: {status_g}"
+        report_text += f"\n👥 Ulangan Telegram guruhga: {status_g}"
 
     await msg.reply_text(report_text, parse_mode=ParseMode.MARKDOWN, reply_markup=main_menu_keyboard())
     return ConversationHandler.END
