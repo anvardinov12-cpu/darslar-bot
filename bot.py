@@ -670,9 +670,9 @@ async def group_members_callback(update: Update, context: ContextTypes.DEFAULT_T
 
     if len(text) > 4000:
         for x in range(0, len(text), 4000):
-            await query.message.reply_text(text[x:x+4000], parse_mode=ParseMode.MARKDOWN)
+            await query.message.reply_text(text[x:x+4000], parse_mode=ParseMode.HTML)
     else:
-        await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        await query.message.reply_text(text, parse_mode=ParseMode.HTML)
 
 async def list_lessons_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -811,9 +811,9 @@ async def admin_all_users_callback(update: Update, context: ContextTypes.DEFAULT
 
     if len(text) > 4000:
         for x in range(0, len(text), 4000):
-            await query.message.reply_text(text[x:x+4000], parse_mode=ParseMode.MARKDOWN)
+            await query.message.reply_text(text[x:x+4000], parse_mode=ParseMode.HTML)
     else:
-        await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        await query.message.reply_text(text, parse_mode=ParseMode.HTML)
 
 async def admin_kick_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != SUPER_ADMIN_ID:
