@@ -220,13 +220,18 @@ cancel_keyboard = ReplyKeyboardMarkup(
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     args = context.args
+    message = update.message
+
+    # Agar xabar guruh yoki superguruhdan yuborilgan bo'lsa, /start buyrug'iga javob bermaymiz
+    if message.chat.type in ["group", "supergroup"]:
+        return
 
     if args and args[0].startswith("g_"):
         code = args[0][2:]
         group = db.get_group_by_code(code)
         if group:
             db.add_subscriber(user.id, group["id"], user.first_name)
-            await update.message.reply_text(
+            await message.reply_text(
                 f"🎉 Siz **{group['name']}** guruhiga muvaffaqiyatli a'zo bo'ldingiz!\n\n"
                 f"Dars eslatmalari darsingizdan 1 kun, 12, 6, 1 soat, 15 daqiqa avval va dars boshlanganida yuboriladi.\n\n"
                 f"---\n\n"
@@ -239,16 +244,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         else:
-            await update.message.reply_text("❌ Guruh topilmadi yoki havola eskirgan.", reply_markup=main_menu_keyboard())
+            await message.reply_text("❌ Guruh topilmadi yoki havola eskirgan.", reply_markup=main_menu_keyboard())
 
     db.add_subscriber(user.id, 0, user.first_name)
-    await update.message.reply_text(
+    await message.reply_text(
         f"Xush kelibsiz, **{user.first_name}**! 👋\n\n"
         f"Bot orqali darslaringizni kuzatib boring va eslatmalarni o'zingizga moslang.",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=main_menu_keyboard()
     )
-
+    
 # --- Guide / Foydalanish tartibi ---
 async def show_guide(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
