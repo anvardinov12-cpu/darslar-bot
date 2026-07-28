@@ -159,7 +159,9 @@ def add_subscriber(user_id: int, group_id: int, full_name: str = ""):
     with get_db() as conn:
         if group_id != 0:
             conn.execute("INSERT OR IGNORE INTO subscribers (user_id, group_id) VALUES (?, ?)", (user_id, group_id))
+            
         conn.execute("INSERT OR IGNORE INTO user_settings (user_id) VALUES (?)", (user_id,))
+        
         if full_name:
             conn.execute("""
                 INSERT INTO users (user_id, full_name) VALUES (?, ?)
