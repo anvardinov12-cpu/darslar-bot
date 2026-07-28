@@ -669,8 +669,12 @@ async def group_members_callback(update: Update, context: ContextTypes.DEFAULT_T
     for idx, user_info in enumerate(subs, start=1):
         uid = user_info["user_id"]
         name = user_info["full_name"]
+        if not name:
+            name = "Foydalanuvchi"
+            
         safe_name = html.escape(name)
-        line = f"{idx}. 👤 <a href='tg://user?id={uid}'>{safe_name}</a> (ID: <code>{uid}</code>)\n"
+        # \u200E belgisi matn yo'nalishini va tartibini to'g'ri saqlaydi
+        line = f"\u200E{idx}. 👤 <a href='tg://user?id={uid}'>{safe_name}</a> (ID: <code>{uid}</code>)\n"
 
         # Agar matn 4000 belgidan oshib ketsa, oldingi qismni yuborib, 
         # yangi xabarni sarlavhadan boshlab yig'amiz (teglar kesilmaydi)
@@ -819,10 +823,13 @@ async def admin_all_users_callback(update: Update, context: ContextTypes.DEFAULT
     for idx, u in enumerate(users_list, start=1):
         uid = u["user_id"]
         name = u["full_name"]
+        if not name:
+            name = "Foydalanuvchi"
+            
         safe_name = html.escape(name)
-        line = f"{idx}. 👤 <a href='tg://user?id={uid}'>{safe_name}</a> (ID: <code>{uid}</code>)\n"
-        
-        # Agar yangi qatorni qo'shganda matn 4000 belgidan oshib ketsa, 
+        line = f"\u200E{idx}. 👤 <a href='tg://user?id={uid}'>{safe_name}</a> (ID: <code>{uid}</code>)\n"
+
+        # Agar yangi qatorni qo'shganda matn 4000 belgidan oshib ketsa,
         # oldingi qismni yuborib, yangi xabar yig'ishni boshlaymiz (teglarni kesib yubormaslik uchun)
         if len(text) + len(line) > 4000:
             await query.message.reply_text(text, parse_mode=ParseMode.HTML)
