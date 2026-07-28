@@ -1,6 +1,7 @@
 import os
 import io
 import logging
+import html
 from datetime import datetime, timedelta
 import pytz
 from dotenv import load_dotenv
@@ -664,7 +665,8 @@ async def group_members_callback(update: Update, context: ContextTypes.DEFAULT_T
     for idx, user_info in enumerate(subs, start=1):
         uid = user_info["user_id"]
         name = user_info["full_name"]
-        text += f"{idx}. 👤 [{name}](tg://user?id={uid}) (ID: `{uid}`)\n"
+        safe_name = html.escape(name) # Ismni HTML xavfsiz holatga keltiramiz
+        text += f"{idx}. 👤 <a href='tg://user?id={uid}'>{safe_name}</a> (ID: <code>{uid}</code>)\n"
 
     if len(text) > 4000:
         for x in range(0, len(text), 4000):
@@ -804,7 +806,8 @@ async def admin_all_users_callback(update: Update, context: ContextTypes.DEFAULT
     for idx, u in enumerate(users_list, start=1):
         uid = u["user_id"]
         name = u["full_name"]
-        text += f"{idx}. 👤 [{name}](tg://user?id={uid}) (ID: `{uid}`)\n"
+        safe_name = html.escape(name) # Ismni HTML xavfsiz holatga keltiramiz
+        text += f"{idx}. 👤 <a href='tg://user?id={uid}'>{safe_name}</a> (ID: <code>{uid}</code>)\n"
 
     if len(text) > 4000:
         for x in range(0, len(text), 4000):
