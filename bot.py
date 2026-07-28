@@ -343,7 +343,7 @@ async def start_add_lesson(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=cancel_keyboard)
     return WAIT_BULK_LESSONS
 
-# Real Telegram guruhdan turib /link_{id} yuborilganda ishlaydi
+# Real Telegram guruhdan turib /link_{secret_token} yuborilganda ishlaydi
 async def handle_group_linking(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
     if not message or not message.text:
@@ -356,18 +356,24 @@ async def handle_group_linking(update: Update, context: ContextTypes.DEFAULT_TYP
     text = message.text.strip()
     if text.startswith("/link_"):
         try:
-            group_id = int(text.split("_")[1])
+            token = text.split("_")[1] # Maxfiy tokenni ajratib olamiz
             tg_chat_id = str(message.chat.id)
+            
+            # Token bo'yicha guruhni bazadan qidiramiz
+            group = db.get_group_by_secret_token(token)
+            
+            if not group:
+                await message.reply_text("❌ Xatolik: Bunday maxfiy kalitli guruh topilmadi yoki havola eskirgan.", parse_mode=ParseMode.MARKDOWN)
+                return
+
+            group_id = group["id"]
             
             # Bazaga chat_id ni saqlaymiz
             db.link_telegram_group(group_id, tg_chat_id)
             
-            group = db.get_group(group_id)
-            group_name = group['name'] if group else "Guruh"
-            
             await message.reply_text(
                 f"✅ **Muvaffaqiyatli ulandi!**\n\n"
-                f"Bu Telegram guruh 'Darslar Eslatma bot'dagi **\"{group_name}\"** guruhining jadvaliga muvaffaqiyatli ulandi! "
+                f"Bu Telegram guruh 'Darslar Eslatma bot'dagi **\"{group['name']}\"** guruhining jadvaliga muvaffaqiyatli ulandi! "
                 f"Endi dars vaqti yaqinlashganda va kelganda eslatmalar shu yerga keladi.",
                 parse_mode=ParseMode.MARKDOWN
             )
@@ -587,22 +593,30 @@ async def group_manage_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text("🗑 Guruh va undagi barcha darslar muvaffaqiyatli o'chirildi.")
     
     elif data.startswith("linkgroup_"):
-        await query.answer() # <-- TUGMA AYLANISHINI TO'XTATISH UCHUN SHU SHART
+        await query.answer()
         try:
             gid = int(data.split("_")[1])
             group = db.get_group(gid)
+            
+            # Agar guruhda token hali bo'lmasa (eski guruhlar uchun), uni yaratib qo'yamiz
+            token = group.get('secret_token')
+            if not token:
+                import secrets
+                token = secrets.token_hex(6)
+                with db.get_db() as conn:
+                    conn.execute("UPDATE groups SET secret_token = ? WHERE id = ?", (token, gid))
         
             text = (
                 f"🔗 Eslatuvchi botni real Telegram guruhga ulash uchun yo'riqnoma:\n\n"
                 f"1️⃣ Botimizni dars o'tadigan real Telegram guruhingizga qo'shing va **Administrator** huquqini bering.\n"
                 f"2️⃣ O'sha Telegram guruh ichiga kiring va ushbu buyruqni yuboring:\n\n"
-                f"👉 `/link_{gid}`\n\n"
-                f"Shundan so'ng bot avtomatik ravishda ushbu guruhni bog'lab oladi va faqat o'sha guruhga tegish bo'lgan eslatmalarni yuborib turadi!"
+                f"👉 `/link_{token}`\n\n"
+                f"Shundan so'ng bot avtomatik ravishda ushbu guruhni xavfsiz bog'lab oladi!"
             )
             back_btn = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Orqaga", callback_data=f"managegroup_{gid}")]])
             await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=back_btn)
         except Exception as e:
-            await query.message.reply_text(f"Xatolik: {e}")    
+            await query.message.reply_text(f"Xatolik: {e}")
     
     elif data.startswith("unlinkgroup_"):
         gid = int(data.split("_")[1])
