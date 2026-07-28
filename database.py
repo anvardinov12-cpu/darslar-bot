@@ -260,10 +260,15 @@ def get_total_stats():
 def get_all_users_list():
     with get_db() as conn:
         rows = conn.execute("""
-            SELECT DISTINCT s.user_id, COALESCE(u.full_name, 'Foydalanuvchi') as full_name 
+            SELECT DISTINCT s.user_id, 
+                   CASE 
+                       WHEN u.full_name IS NULL OR TRIM(u.full_name) = '' THEN 'Foydalanuvchi'
+                       ELSE u.full_name 
+                   END as full_name 
             FROM subscribers s
             LEFT JOIN users u ON s.user_id = u.user_id
             WHERE s.user_id != 0
+            ORDER BY s.user_id ASC
         """).fetchall()
         return [dict(r) for r in rows]
 
