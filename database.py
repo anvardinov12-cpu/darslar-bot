@@ -259,6 +259,27 @@ def get_total_stats():
         total_lessons = conn.execute("SELECT COUNT(*) FROM lessons").fetchone()[0]
         return total_users, total_groups, total_lessons
 
+def get_all_groups_with_owners():
+    with get_db() as conn:
+        rows = conn.execute("""
+            SELECT g.id, g.name, g.invite_code, g.owner_id,
+                   COALESCE(u.full_name, 'Foydalanuvchi') as owner_name
+            FROM groups g
+            LEFT JOIN users u ON g.owner_id = u.user_id
+            ORDER BY g.id DESC
+        """).fetchall()
+        return [dict(r) for r in rows]
+
+def get_all_lessons_with_groups():
+    with get_db() as conn:
+        rows = conn.execute("""
+            SELECT l.id, l.title, l.teacher, l.start_time, g.name as group_name
+            FROM lessons l
+            JOIN groups g ON l.group_id = g.id
+            ORDER BY l.start_time ASC
+        """).fetchall()
+        return [dict(r) for r in rows]
+
 def get_all_users_list():
     with get_db() as conn:
         rows = conn.execute("""
