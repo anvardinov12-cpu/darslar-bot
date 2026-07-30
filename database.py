@@ -281,3 +281,22 @@ def delete_user_from_bot(user_id: int):
         conn.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM user_settings WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM sent_reminders WHERE user_id = ?", (user_id,))
+
+# --- Avtomatik Tozalash (Cleanup Database) ---
+def cleanup_expired_data():
+    now_str = get_now().strftime("%Y-%m-%d %H:%M:%S")
+    with get_db() as conn:
+        # 1. Muddati o'tib ketgan darslarni o'chirish (start_time hozirgi vaqtdan o'tib ketgan bo'lsa)
+        conn.execute("DELETE FROM lessons WHERE start_time < ?", (now_str,))
+        
+        # 2. Asl guruhi bazadan o'chib ketgan, lekin subscribers jadvalida qolib ketgan "yetim" obunalarni tozalash
+        conn.execute("""
+            DELETE FROM subscribers 
+            WHERE group_id != 0 AND group_id NOT IN (SELECT id FROM groups)
+        """)
+        
+        # 3. Allaqachon o'chib ketgan darslarga tegishli eskirgan sent_reminders loglarini tozalash
+        conn.execute("""
+            DELETE FROM sent_reminders 
+            WHERE lesson_id NOT IN (SELECT id FROM lessons)
+        """)
