@@ -799,8 +799,10 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"⚠️ *Foydalanuvchini o'chirish (ban)* uchun botga:\n`/kick ID_RAQAM` deb yozing."
     )
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("👥 Barcha Obunachilar Ro'yxati", callback_data="get_all_subscribers")],
-        [InlineKeyboardButton("📢 Xabar tarqatish", callback_data="admin_broadcast")]
+        [InlineKeyboardButton("👥 Barcha Obunachilar", callback_data="get_all_subscribers"),
+         InlineKeyboardButton("📁 Joriy Guruhlar", callback_data="admin_all_groups")],
+        [InlineKeyboardButton("📚 Joriy Darslar", callback_data="admin_all_lessons"),
+         InlineKeyboardButton("📢 Xabar tarqatish", callback_data="admin_broadcast")]
     ])
     await message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
 
@@ -816,6 +818,61 @@ async def admin_all_users_callback(update: Update, context: ContextTypes.DEFAULT
         await query.message.reply_text("Obunachilar topilmadi.")
         return
 
+async def admin_all_groups_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer("⏳ Guruhlar ro'yxati olinmoqda...")
+    if query.from_user.id != SUPER_ADMIN_ID:
+        return
+
+    groups = db.get_all_groups_with_owners()
+    if not groups:
+        await query.message.reply_text("Hozircha bazada guruhlar yo'q.")
+        return
+
+    header = f"📁 <b>Barcha Guruhlar Ro'yxati ({len(groups)} ta):</b>\n\n"
+    text = header
+    for idx, g in enumerate(groups, start=1):
+        owner_name = html.escape(g["owner_name"])
+        g_name = html.escape(g["name"])
+        line = f"\u200E{idx}. <b>{g_name}</b> (ID: {g['id']})\n   👤 Egasi: <a href='tg://user?id={g['owner_id']}'>{owner_name}</a> (ID: <code>{g['owner_id']}</code>)\n\n"
+
+        if len(text) + len(line) > 4000:
+            await query.message.reply_text(text, parse_mode=ParseMode.HTML)
+            text = header
+        text += line
+
+    if text:
+        await query.message.reply_text(text, parse_mode=ParseMode.HTML)
+
+async def admin_all_lessons_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer("⏳ Darslar ro'yxati olinmoqda...")
+    if query.from_user.id != SUPER_ADMIN_ID:
+        return
+
+    lessons = db.get_all_lessons_with_groups()
+    if not lessons:
+        await query.message.reply_text("Hozircha faol darslar mavjud emas.")
+        return
+
+    header = f"📚 <b>Barcha Kelgusi Darslar ({len(lessons)} ta):</b>\n\n"
+    text = header
+    for idx, l in enumerate(lessons, start=1):
+        dt = datetime.strptime(l["start_time"], "%Y-%m-%d %H:%M:%S")
+        g_name = html.escape(l["group_name"])
+        l_title = html.escape(l["title"])
+        teacher = html.escape(l['teacher']) if l['teacher'] else "Ko'rsatilmagan"
+        
+        line = f"\u200E{idx}. 📖 <b>{l_title}</b>\n   📁 Guruh: {g_name}\n   👤 Ustoz: {teacher}\n   🗓 Vaqti: {dt.strftime('%d.%m.%Y %H:%M')}\n\n"
+
+        if len(text) + len(line) > 4000:
+            await query.message.reply_text(text, parse_mode=ParseMode.HTML)
+            text = header
+        text += line
+
+    if text:
+        await query.message.reply_text(text, parse_mode=ParseMode.HTML)
+    
     # Sarlavhadan boshlaymiz
     header = f"👥 <b>Barcha Bot Obunachilari ({len(users_list)} ta):</b>\n\n"
     text = header
@@ -948,6 +1005,8 @@ def main():
 
     # Aniq patternli Callback'lar
     app.add_handler(CallbackQueryHandler(admin_all_users_callback, pattern="^get_all_subscribers$"))
+    app.add_handler(CallbackQueryHandler(admin_all_groups_callback, pattern="^admin_all_groups$"))
+    app.add_handler(CallbackQueryHandler(admin_all_lessons_callback, pattern="^admin_all_lessons$"))
     app.add_handler(CallbackQueryHandler(ics_download_callback, pattern="^download_ics_"))
     app.add_handler(CallbackQueryHandler(group_members_callback, pattern="^groupmembers_"))
     app.add_handler(CallbackQueryHandler(unsubscribe_callback, pattern="^unsub_")) # <-- Obunani bekor qiluvchi handler shu yerda
