@@ -890,6 +890,7 @@ async def send_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- Main App ---
 def main():
     db.init_db()  # <-- MANA SHU QATORNI QO'SHISH SHART!
+    db.cleanup_expired_data()
     
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
