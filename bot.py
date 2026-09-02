@@ -5,7 +5,15 @@ import html
 from datetime import datetime, timedelta
 import pytz
 from dotenv import load_dotenv
+import asyncio
+import sys
 
+if sys.platform != "win32":
+    try:
+        asyncio.get_event_loop_policy().get_event_loop()
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
+        
 from telegram import (
     Update,
     InlineKeyboardMarkup,
