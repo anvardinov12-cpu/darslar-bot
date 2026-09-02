@@ -1065,9 +1065,10 @@ async def show_curriculum_menu(update: Update, context: ContextTypes.DEFAULT_TYP
     keyboard = []
     
     if items:
-    for idx, item in enumerate(items, start=1):
-        text += f"{idx}. **{item['subject_title']}** — Jami: {item['total_count']} ta\n"
-        keyboard.append([InlineKeyboardButton(f"❌ O'chirish: {item['subject_title']}", callback_data=f"delcurr_{item['id']}_{gid}")])
+        for idx, item in enumerate(items, start=1):
+            # Bu yerda ortiqcha 'Hozir' yozuvi olib tashlandi va to'g'ri format qilindi
+            text += f"{idx}. **{item['subject_title']}** — Jami: {item['total_count']} ta\n"
+            keyboard.append([InlineKeyboardButton(f"❌ O'chirish: {item['subject_title']}", callback_data=f"delcurr_{item['id']}_{gid}")])
     else:
         text += "_Hali fanlar kiritilmagan._\n"
         
@@ -1299,6 +1300,7 @@ def main():
     app.add_handler(CallbackQueryHandler(delete_lesson_callback, pattern="^(delete_lesson_|dellesson_)"))
     app.add_handler(CallbackQueryHandler(group_manage_callback, pattern="^(managegroup_|delgroup_|linkgroup_|unlinkgroup_|confirmdel_)"))
     app.add_handler(CallbackQueryHandler(show_weekly_schedule_menu, pattern="^weeksched_"))
+    app.add_handler(CallbackQueryHandler(edit_day_schedule, pattern="^editday_"))
     app.add_handler(CallbackQueryHandler(show_curriculum_menu, pattern="^curriculum_"))
     app.add_handler(CallbackQueryHandler(delete_curriculum_callback, pattern="^delcurr_"))
     
