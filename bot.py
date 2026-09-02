@@ -991,7 +991,7 @@ async def edit_day_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         f"📌 **{day_name} kuni uchun darslar:**\n\n"
         f"Hozirgi ro'yxat:\n{current_text if current_text else '_Hali kiritilmagan_'}\n\n"
-        "✍️ Ushbu kun uchun yangi darslar ro'yxatini yuboring masalan: `n1. Iqtisodiyot\n2. Huquqshunoslik\n3. Matematika`"
+        "✍️ Ushbu kun uchun yangi darslar ro'yxatini yuboring masalan: \`1. Iqtisodiyot\n2. Huquqshunoslik\n3. Matematika`"
     )
     await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=cancel_keyboard)
     return WAIT_DAY_SCHEDULE
