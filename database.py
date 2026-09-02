@@ -357,7 +357,38 @@ def get_day_schedule(group_id: int, day_index: int):
             "SELECT schedule_text FROM weekly_day_schedule WHERE group_id = ? AND day_index = ?",
             (group_id, day_index)
         ).fetchone()
-        return row["schedule_text"] if row else ""
+        
+        if not row or not row["schedule_text"]:
+            return ""
+            
+        text = row["schedule_text"]
+        
+        # Umumiy ro'yxatdagi mavjud fanlarni olamiz
+        curriculum_items = get_all_curriculum(group_id)
+        valid_titles = {item["subject_title"].strip().lower() for item in curriculum_items}
+        
+        # Agar umumiy ro'yxat bo'sh bo'lsa, matnni o'zini qaytaramiz yoki bo'shatamiz
+        if not valid_titles:
+            return text
+            
+        lines = text.split("\n")
+        filtered_lines = []
+        counter = 1
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            parts = line.split(".", 1)
+            subj_name = parts[1].strip() if len(parts) > 1 else parts[0].strip()
+            
+            # Agar fan umumiy ro'yxatda mavjud bo'lsagina qoldiramiz
+            if subj_name.lower() in valid_titles:
+                filtered_lines.append(f"{counter}. {subj_name}")
+                counter += 1
+                
+        return "\n".join(filtered_lines)
 
 def save_day_schedule(group_id: int, day_index: int, text: str):
     with get_db() as conn:
