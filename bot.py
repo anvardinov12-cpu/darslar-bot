@@ -967,7 +967,7 @@ async def show_weekly_schedule_menu(update: Update, context: ContextTypes.DEFAUL
     
     keyboard = []
     for idx, day_name in enumerate(DAYS_OF_WEEK):
-        keyboard.append([InlineKeyboardButton(f"📌 {day_name}", callback_data=f"editday_{gid}_{idx})".replace(")", ""))])
+        keyboard.append([InlineKeyboardButton(f"📅  {day_name}", callback_data=f"editday_{gid}_{idx})".replace(")", ""))])
     
     keyboard.append([InlineKeyboardButton("⬅️ Orqaga", callback_data=f"managegroup_{gid}")])
     await query.edit_message_text(
@@ -991,7 +991,7 @@ async def edit_day_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         f"📌 **{day_name} kuni uchun darslar:**\n\n"
         f"Hozirgi ro'yxat:\n{current_text if current_text else '_Hali kiritilmagan_'}\n\n"
-        "✍️ Ushbu kun uchun yangi darslar ro'yxatini yuboring (masalan: `1. Aqiyda - 1-dars\n2. Siyrat - 1-dars`):"
+        "✍️ Ushbu kun uchun yangi darslar ro'yxatini yuboring masalan: \`n1. Iqtisodiyot\n2. Huquqshunoslik\n3. Matematika`"
     )
     await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=cancel_keyboard)
     return WAIT_DAY_SCHEDULE
@@ -1035,7 +1035,7 @@ async def start_add_curriculum(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data["curr_gid"] = gid
     
     await query.message.reply_text(
-        "📝 Yangi fan va uning jami dars sonini quyidagi formatda kiriting:\n\n`Fan nomi | Jami dars soni`\n_Misol: Siyrat | 15_",
+        "📝 Yangi fan va uning jami dars sonini quyidagi formatda kiriting:\n\n`Fan nomi - Jami dars soni`\n_Misol: Dasturlash - 60_",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=cancel_keyboard
     )
