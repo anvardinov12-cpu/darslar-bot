@@ -991,7 +991,7 @@ async def edit_day_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         f"📌 **{day_name} kuni uchun darslar:**\n\n"
         f"Hozirgi ro'yxat:\n{current_text if current_text else '_Hali kiritilmagan_'}\n\n"
-        "✍️ Ushbu kun uchun yangi darslar ro'yxatini yuboring masalan: \`n1. Iqtisodiyot\n2. Huquqshunoslik\n3. Matematika`"
+        "✍️ Ushbu kun uchun yangi darslar ro'yxatini yuboring masalan: `n1. Iqtisodiyot\n2. Huquqshunoslik\n3. Matematika`"
     )
     await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=cancel_keyboard)
     return WAIT_DAY_SCHEDULE
@@ -1001,8 +1001,56 @@ async def save_day_schedule_text(update: Update, context: ContextTypes.DEFAULT_T
     gid = context.user_data.get("sched_gid")
     day_idx = context.user_data.get("sched_day")
     
-    db.save_day_schedule(gid, day_idx, text)
-    await update.message.reply_text("✅ Jadval muvaffaqiyatli saqlandi!", reply_markup=main_menu_keyboard())
+    # 1. Guruhning umumiy fanlar ro'yxatini olamiz
+    curriculum_items = db.get_all_curriculum(gid)
+    if not curriculum_items:
+        await update.message.reply_text(
+            "❌ Avval 'Barcha darslar adadi va ro'yxati' bo'limidan fanlarni va sonini kiritishingiz kerak!",
+            reply_markup=main_menu_keyboard()
+        )
+        return ConversationHandler.END
+
+    # Umumiy ro'yxatdagi fan nomlarini kichik harflarda to'plab olamiz
+    valid_subjects = {item["subject_title"].strip().lower(): item for item in curriculum_items}
+    
+    lines = text.split("\n")
+    validated_lines = []
+    
+    for line in lines:
+        line_clean = line.strip()
+        if not line_clean:
+            continue
+            
+        # Raqam va nuqtani ajratib olamiz (masalan: "1. Aqiyda" -> "Aqiyda")
+        parts = line_clean.split(".", 1)
+        subject_name = parts[1].strip() if len(parts) > 1 else parts[0].strip()
+        
+        # Agar foydalanuvchi "- 1-dars" deb yozgan bo'lsa ham, asosiy nomni ajratib olamiz
+        subject_name = subject_name.split("-")[0].strip()
+        
+        # 2. Umumiy ro'yxatda bor-yo'qligini tekshiramiz
+        if subject_name.lower() in valid_subjects:
+            # Toza va tartibli holatda saqlaymiz (masalan: "1. Aqiyda")
+            matched_item = valid_subjects[subject_name.lower()]
+            formatted_line = f"{len(validated_lines) + 1}. {matched_item['subject_title']}"
+            validated_lines.append(formatted_line)
+        else:
+            await update.message.reply_text(
+                f"❌ Xatolik: **'{subject_name}'** fani umumiy darslar ro'yxatida mavjud emas!\n\n"
+                f"Iltimos, avval 'Barcha darslar adadi va ro'yxati' bo'limiga shu fanni qo'shing yoki to'g'ri nom yozing.",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=cancel_keyboard
+            )
+            return WAIT_DAY_SCHEDULE
+
+    # Barcha qatorlar tekshiruvdan o'tdi, bazaga saqlaymiz
+    final_text = "\n".join(validated_lines)
+    db.save_day_schedule(gid, day_idx, final_text)
+    
+    await update.message.reply_text(
+        "✅ Haftalik dars jadvali umumiy ro'yxat bilan solishtirilib, muvaffaqiyatli saqlandi!", 
+        reply_markup=main_menu_keyboard()
+    )
     return ConversationHandler.END
 
 # Barcha darslar adadi (Curriculum)
@@ -1035,7 +1083,7 @@ async def start_add_curriculum(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data["curr_gid"] = gid
     
     await query.message.reply_text(
-        "📝 Yangi fan va uning jami dars sonini quyidagi formatda kiriting:\n\n`Fan nomi - Jami dars soni`\n_Misol: Dasturlash - 60_",
+        "📝 Yangi fan va uning jami dars sonini quyidagi formatda kiriting:\n\n`Fan nomi - Jami dars soni`\n_Misol: Dasturlash | 60_",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=cancel_keyboard
     )
