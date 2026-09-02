@@ -391,7 +391,53 @@ def add_curriculum_item(group_id: int, title: str, total: int):
 
 def delete_curriculum_item(item_id: int):
     with get_db() as conn:
+        # 1. O'chirilayotgan fanning ma'lumotlarini olib olamiz
+        item = conn.execute("SELECT group_id, subject_title FROM group_curriculum WHERE id = ?", (item_id,)).fetchone()
+        if not item:
+            return
+        
+        group_id = item["group_id"]
+        subject_title = item["subject_title"].strip().lower()
+
+        # 2. Fanni bazadagi umumiy ro'yxatdan o'chiramiz
         conn.execute("DELETE FROM group_curriculum WHERE id = ?", (item_id,))
+
+        # 3. Shu guruhning hafta kunlari jadvallaridan ham bu fanni tozalab chiqamiz
+        schedules = conn.execute("SELECT id, schedule_text FROM weekly_day_schedule WHERE group_id = ?", (group_id,)).fetchall()
+        
+        for sch in schedules:
+            sch_id = sch["id"]
+            text = sch["schedule_text"]
+            if not text:
+                continue
+            
+            lines = text.split("\n")
+            new_lines = []
+            counter = 1
+            changed = False
+            
+            for line in lines:
+                line_str = line.strip()
+                if not line_str:
+                    continue
+                
+                # Qatordagi fan nomini ajratib olamiz (masalan: "1. Matematika" -> "Matematika")
+                parts = line_str.split(".", 1)
+                curr_name = parts[1].strip() if len(parts) > 1 else parts[0].strip()
+                
+                # Agar o'chirilayotgan fanga mos kelsa, uni tashlab yuboramiz
+                if curr_name.lower() == subject_title:
+                    changed = True
+                    continue
+                
+                # Qolgan fanlarni tartib raqamini yangilab yig'amiz
+                new_lines.append(f"{counter}. {curr_name}")
+                counter += 1
+            
+            # Agar ro'yxatdan fan o'chirilgan bo'lsa, bazadagi jadvalni yangilaymiz
+            if changed:
+                new_text = "\n".join(new_lines)
+                conn.execute("UPDATE weekly_day_schedule SET schedule_text = ? WHERE id = ?", (new_text, sch_id))
 
 def update_curriculum_index(item_id: int, new_index: int):
     with get_db() as conn:
