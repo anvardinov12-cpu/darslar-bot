@@ -1186,21 +1186,16 @@ async def send_daily_schedule_job(context: ContextTypes.DEFAULT_TYPE):
                 remaining = item["current_index"] # Qolgan darslar soni
                 total = item["total_count"]
                 
-                # Agar hali qolgan darslar bo'lsa (0 dan katta bo'lsa)
                 if remaining > 0:
                     active_lessons_lines.append(f"{valid_counter}. {item['subject_title']} (Qolgan: {remaining} ta / Jami: {total})")
                     valid_counter += 1
                     
-                    # Qolgan darslar sonini 1 taga kamaytirib saqlaymiz
+                    # 🔴 ENG MUHIM O'ZGARISH: Har safar dars chiqqanda qolgan darslar sonini 1 taga kamaytiramiz
                     db.update_curriculum_index(item["id"], remaining - 1)
-                else:
-                    # Darslar tugagan (qolgan = 0) bo'lsa, jadvalga chiqarilmaydi
-                    pass
             else:
                 active_lessons_lines.append(f"{valid_counter}. {subj_name}")
                 valid_counter += 1
                 
-        # Agar bugungi kunda hali o'tilishi kerak bo'lgan faol darslar qolgan bo'lsagina xabar yuboriladi
         if active_lessons_lines:
             final_schedule_text = "\n".join(active_lessons_lines)
             date_str = now.strftime("%d-%B, %Y")
