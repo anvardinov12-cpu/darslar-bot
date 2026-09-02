@@ -321,3 +321,77 @@ def cleanup_expired_data():
             DELETE FROM sent_reminders 
             WHERE lesson_id NOT IN (SELECT id FROM lessons)
         """)
+
+# --- DATABASE.PY ga qo'shiladigan qism ---
+
+# 1. init_db() funksiyasi ichiga quyidagi jadvallarni qo'shing:
+def init_db():
+    with get_db() as conn:
+        # ... (sizdagi mavjud jadvallar shu yerda qoladi) ...
+        
+        # YANGI: Fanlar va haftalik jadval jadvallari
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS group_curriculum (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id INTEGER NOT NULL,
+                subject_title TEXT NOT NULL,
+                total_count INTEGER NOT NULL,
+                current_index INTEGER DEFAULT 1,
+                FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS weekly_day_schedule (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id INTEGER NOT NULL,
+                day_index INTEGER NOT NULL, -- 0: Dushanba, 1: Seshanba, ..., 5: Shanba
+                schedule_text TEXT NOT NULL,
+                FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE
+            )
+        """)
+
+# 2. Faylning oxiriga quyidagi funksiyalarni qo'shib qo'ying:
+def get_day_schedule(group_id: int, day_index: int):
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT schedule_text FROM weekly_day_schedule WHERE group_id = ? AND day_index = ?",
+            (group_id, day_index)
+        ).fetchone()
+        return row["schedule_text"] if row else ""
+
+def save_day_schedule(group_id: int, day_index: int, text: str):
+    with get_db() as conn:
+        existing = conn.execute(
+            "SELECT id FROM weekly_day_schedule WHERE group_id = ? AND day_index = ?",
+            (group_id, day_index)
+        ).fetchone()
+        if existing:
+            conn.execute(
+                "UPDATE weekly_day_schedule SET schedule_text = ? WHERE group_id = ? AND day_index = ?",
+                (text, group_id, day_index)
+            )
+        else:
+            conn.execute(
+                "INSERT INTO weekly_day_schedule (group_id, day_index, schedule_text) VALUES (?, ?, ?)",
+                (group_id, day_index, text)
+            )
+
+def get_all_curriculum(group_id: int):
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM group_curriculum WHERE group_id = ?", (group_id,)).fetchall()
+        return [dict(r) for r in rows]
+
+def add_curriculum_item(group_id: int, title: str, total: int):
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO group_curriculum (group_id, subject_title, total_count, current_index) VALUES (?, ?, ?, 1)",
+            (group_id, title, total)
+        )
+
+def delete_curriculum_item(item_id: int):
+    with get_db() as conn:
+        conn.execute("DELETE FROM group_curriculum WHERE id = ?", (item_id,))
+
+def update_curriculum_index(item_id: int, new_index: int):
+    with get_db() as conn:
+        conn.execute("UPDATE group_curriculum SET current_index = ? WHERE id = ?", (new_index, item_id))
