@@ -47,6 +47,8 @@ WAIT_GROUP_NAME = 1
 WAIT_BULK_LESSONS = 2
 BROADCAST_WAIT_MSG = 100
 GROUP_ANNOUNCE_WAIT_MSG = 101
+WAIT_DAY_SCHEDULE = 3
+WAIT_CURRICULUM_ITEM = 4
 
 
 # --- Background Reminder Checker ---
@@ -575,6 +577,8 @@ async def group_manage_callback(update: Update, context: ContextTypes.DEFAULT_TY
         btns = [
             [InlineKeyboardButton("➕ Dars Qo'shish", callback_data=f"addlesson_{gid}")],
             [InlineKeyboardButton("📋 Darslar Ro'yxati", callback_data=f"listlessons_{gid}")],
+            [InlineKeyboardButton("📅 Haftalik darslar jadvali", callback_data=f"weeksched_{gid}")],
+            [InlineKeyboardButton("📚 Barcha darslar adadi va ro'yxati", callback_data=f"curriculum_{gid}")],
             [InlineKeyboardButton("👥 Guruh A'zolari", callback_data=f"groupmembers_{gid}")],
             [InlineKeyboardButton("📢 Guruhga E'lon Yuborish", callback_data=f"announcegroup_{gid}")],
         ]
@@ -952,6 +956,146 @@ async def send_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return ConversationHandler.END
 
+# --- YANGI: Haftalik jadval va Darslar ro'yxatini boshqarish funksiyalari ---
+
+DAYS_OF_WEEK = ["Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba"]
+
+async def show_weekly_schedule_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    gid = int(query.data.split("_")[1])
+    
+    keyboard = []
+    for idx, day_name in enumerate(DAYS_OF_WEEK):
+        keyboard.append([InlineKeyboardButton(f"📌 {day_name}", callback_data=f"editday_{gid}_{idx})".replace(")", ""))])
+    
+    keyboard.append([InlineKeyboardButton("⬅️ Orqaga", callback_data=f"managegroup_{gid}")])
+    await query.edit_message_text(
+        "📅 **Haftalik darslar jadvali**\n\nKunni tanlang va shu kun uchun darslar ro'yxatini tahrirlang:",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def edit_day_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    parts = query.data.split("_")
+    gid, day_idx = int(parts[1]), int(parts[2])
+    
+    context.user_data["sched_gid"] = gid
+    context.user_data["sched_day"] = day_idx
+    
+    current_text = db.get_day_schedule(gid, day_idx)
+    day_name = DAYS_OF_WEEK[day_idx]
+    
+    text = (
+        f"📌 **{day_name} kuni uchun darslar:**\n\n"
+        f"Hozirgi ro'yxat:\n{current_text if current_text else '_Hali kiritilmagan_'}\n\n"
+        "✍️ Ushbu kun uchun yangi darslar ro'yxatini yuboring (masalan: `1. Aqiyda - 1-dars\n2. Siyrat - 1-dars`):"
+    )
+    await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=cancel_keyboard)
+    return WAIT_DAY_SCHEDULE
+
+async def save_day_schedule_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    gid = context.user_data.get("sched_gid")
+    day_idx = context.user_data.get("sched_day")
+    
+    db.save_day_schedule(gid, day_idx, text)
+    await update.message.reply_text("✅ Jadval muvaffaqiyatli saqlandi!", reply_markup=main_menu_keyboard())
+    return ConversationHandler.END
+
+# Barcha darslar adadi (Curriculum)
+async def show_curriculum_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    gid = int(query.data.split("_")[1])
+    context.user_data["curr_gid"] = gid
+    
+    items = db.get_all_curriculum(gid)
+    text = "📚 **Guruhdagi fanlar va umumiy darslar adadi:**\n\n"
+    keyboard = []
+    
+    if items:
+        for idx, item in enumerate(items, start=1):
+            text += f"{idx}. **{item['subject_title']}** — Jami: {item['total_count']} ta, Hozir: {item['current_index']}-dars\n"
+            keyboard.append([InlineKeyboardButton(f"❌ O'chirish: {item['subject_title']}", callback_data=f"delcurr_{item['id']}_{gid}")])
+    else:
+        text += "_Hali fanlar kiritilmagan._\n"
+        
+    keyboard.append([InlineKeyboardButton("➕ Fan qo'shish", callback_data=f"addcurr_{gid}")])
+    keyboard.append([InlineKeyboardButton("⬅️ Orqaga", callback_data=f"managegroup_{gid}")])
+    
+    await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def start_add_curriculum(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    gid = int(query.data.split("_")[1])
+    context.user_data["curr_gid"] = gid
+    
+    await query.message.reply_text(
+        "📝 Yangi fan va uning jami dars sonini quyidagi formatda kiriting:\n\n`Fan nomi | Jami dars soni`\n_Misol: Siyrat | 15_",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=cancel_keyboard
+    )
+    return WAIT_CURRICULUM_ITEM
+
+async def save_curriculum_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    gid = context.user_data.get("curr_gid")
+    
+    try:
+        parts = text.split("|")
+        title = parts[0].strip()
+        total = int(parts[1].strip())
+        
+        db.add_curriculum_item(gid, title, total)
+        await update.message.reply_text(f"✅ **{title}** fani ({total} ta dars) qo'shildi!", parse_mode=ParseMode.MARKDOWN, reply_markup=main_menu_keyboard())
+    except Exception as e:
+        await update.message.reply_text(f"❌ Xatolik formatda! Qaytadan urinib ko'ring: `{e}`", parse_mode=ParseMode.MARKDOWN)
+    return ConversationHandler.END
+
+async def delete_curriculum_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    parts = query.data.split("_")
+    item_id, gid = int(parts[1]), int(parts[2])
+    
+    db.delete_curriculum_item(item_id)
+    # Menyuni qaytadan chaqiramiz
+    query.data = f"curriculum_{gid}"
+    await show_curriculum_menu(update, context)
+
+async def send_daily_schedule_job(context: ContextTypes.DEFAULT_TYPE):
+    """Har kuni ertalab soat 04:00 da o'sha kunlik darslar jadvalini yuboradi"""
+    now = datetime.now(TZ)
+    # 0: Dushanba, ..., 5: Shanba, 6: Yakshanba
+    day_idx = now.weekday()
+    
+    if day_idx > 5: # Agar yakshanba bo'lsa, xabar yubormaymiz
+        return
+        
+    with db.get_db() as conn:
+        groups = conn.execute("SELECT * FROM groups WHERE chat_id IS NOT NULL").fetchall()
+        
+    for g in groups:
+        gid = g["id"]
+        chat_id = g["chat_id"]
+        schedule_text = db.get_day_schedule(gid, day_idx)
+        
+        if schedule_text:
+            date_str = now.strftime("%d-%B, %Y")
+            msg = (
+                f"📅 **Bugungi darslar rejasi ({date_str}):**\n\n"
+                f"{schedule_text}\n\n"
+                f"_Talabalar uchun eslatma: Agar darslardan qolib ketgan bo'lsangiz, shu tartibda yetib oling!_"
+            )
+            try:
+                await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode=ParseMode.MARKDOWN)
+            except Exception as e:
+                logging.error(f"Kunlik jadvalni yuborishda xatolik ({chat_id}): {e}")
+
 # --- Main App ---
 def main():
     db.init_db()  # <-- MANA SHU QATORNI QO'SHISH SHART!
@@ -960,6 +1104,7 @@ def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.job_queue.run_repeating(check_reminders, interval=60, first=5)
+    app.job_queue.run_daily(send_daily_schedule_job, time=datetime.strptime("04:00", "%H:%M").time(), days=(0,1,2,3,4,5))
     
     create_group_conv = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex(f"^{BTN_CREATE_GROUP}$"), start_create_group)],
@@ -992,6 +1137,20 @@ def main():
         per_message=False
     )
 
+    day_schedule_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(edit_day_schedule, pattern="^editday_")],
+        states={WAIT_DAY_SCHEDULE: [MessageHandler(filters.TEXT & ~filters.Regex(f"^{BTN_BACK}$"), save_day_schedule_text)]},
+        fallbacks=[MessageHandler(filters.Regex(f"^{BTN_BACK}$"), cancel_group_creation)],
+        per_message=False
+    )
+    
+    curriculum_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(start_add_curriculum, pattern="^addcurr_")],
+        states={WAIT_CURRICULUM_ITEM: [MessageHandler(filters.TEXT & ~filters.Regex(f"^{BTN_BACK}$"), save_curriculum_item)]},
+        fallbacks=[MessageHandler(filters.Regex(f"^{BTN_BACK}$"), cancel_group_creation)],
+        per_message=False
+    )
+    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("admin", admin_panel))
     app.add_handler(CommandHandler("kick", admin_kick_user))
@@ -1001,6 +1160,8 @@ def main():
     app.add_handler(add_lesson_conv)
     app.add_handler(group_announce_conv)
     app.add_handler(broadcast_conv)
+    app.add_handler(day_schedule_conv)
+    app.add_handler(curriculum_conv)
 
     # Menyu tugmalari
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_LESSONS}$"), show_student_lessons))
@@ -1024,7 +1185,10 @@ def main():
     app.add_handler(CallbackQueryHandler(list_lessons_callback, pattern="^listlessons_"))
     app.add_handler(CallbackQueryHandler(delete_lesson_callback, pattern="^(delete_lesson_|dellesson_)"))
     app.add_handler(CallbackQueryHandler(group_manage_callback, pattern="^(managegroup_|delgroup_|linkgroup_|unlinkgroup_|confirmdel_)"))
-
+    app.add_handler(CallbackQueryHandler(show_weekly_schedule_menu, pattern="^weeksched_"))
+    app.add_handler(CallbackQueryHandler(show_curriculum_menu, pattern="^curriculum_"))
+    app.add_handler(CallbackQueryHandler(delete_curriculum_callback, pattern="^delcurr_"))
+    
     app.run_polling()
 
 if __name__ == "__main__":
