@@ -383,9 +383,10 @@ def get_all_curriculum(group_id: int):
 
 def add_curriculum_item(group_id: int, title: str, total: int):
     with get_db() as conn:
+        # Boshlang'ich qolgan darslar soni jami dars soniga teng bo'ladi
         conn.execute(
-            "INSERT INTO group_curriculum (group_id, subject_title, total_count, current_index) VALUES (?, ?, ?, 1)",
-            (group_id, title, total)
+            "INSERT INTO group_curriculum (group_id, subject_title, total_count, current_index) VALUES (?, ?, ?, ?)",
+            (group_id, title, total, total)
         )
 
 def delete_curriculum_item(item_id: int):
