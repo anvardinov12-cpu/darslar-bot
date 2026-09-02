@@ -1147,12 +1147,11 @@ async def delete_curriculum_callback(update: Update, context: ContextTypes.DEFAU
     await show_curriculum_menu(update, context)
 
 async def send_daily_schedule_job(context: ContextTypes.DEFAULT_TYPE):
-    """Har kuni ertalab soat 04:00 da o'sha kunlik darslar jadvalini yuboradi"""
+    """Har kuni ertalab kunlik darslar jadvalini yuboradi va qolgan darslar sonini kamaytirib boradi"""
     now = datetime.now(TZ)
-    # 0: Dushanba, ..., 5: Shanba, 6: Yakshanba
     day_idx = now.weekday()
     
-    if day_idx > 5: # Agar yakshanba bo'lsa, xabar yubormaymiz
+    if day_idx > 5: # Yakshanba bo'lsa yubormaymiz
         return
         
     with db.get_db() as conn:
@@ -1163,18 +1162,58 @@ async def send_daily_schedule_job(context: ContextTypes.DEFAULT_TYPE):
         chat_id = g["chat_id"]
         schedule_text = db.get_day_schedule(gid, day_idx)
         
-        if schedule_text:
+        if not schedule_text:
+            continue
+            
+        curriculum_items = db.get_all_curriculum(gid)
+        curr_dict = {item["subject_title"].strip().lower(): item for item in curriculum_items}
+        
+        lines = schedule_text.split("\n")
+        active_lessons_lines = []
+        valid_counter = 1
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            parts = line.split(".", 1)
+            subj_name = parts[1].strip() if len(parts) > 1 else parts[0].strip()
+            subj_name_lower = subj_name.lower()
+            
+            if subj_name_lower in curr_dict:
+                item = curr_dict[subj_name_lower]
+                remaining = item["current_index"] # Qolgan darslar soni
+                total = item["total_count"]
+                
+                # Agar hali qolgan darslar bo'lsa (0 dan katta bo'lsa)
+                if remaining > 0:
+                    active_lessons_lines.append(f"{valid_counter}. {item['subject_title']} (Qolgan: {remaining} ta / Jami: {total})")
+                    valid_counter += 1
+                    
+                    # Qolgan darslar sonini 1 taga kamaytirib saqlaymiz
+                    db.update_curriculum_index(item["id"], remaining - 1)
+                else:
+                    # Darslar tugagan (qolgan = 0) bo'lsa, jadvalga chiqarilmaydi
+                    pass
+            else:
+                active_lessons_lines.append(f"{valid_counter}. {subj_name}")
+                valid_counter += 1
+                
+        # Agar bugungi kunda hali o'tilishi kerak bo'lgan faol darslar qolgan bo'lsagina xabar yuboriladi
+        if active_lessons_lines:
+            final_schedule_text = "\n".join(active_lessons_lines)
             date_str = now.strftime("%d-%B, %Y")
             msg = (
                 f"📅 **Bugungi darslar rejasi ({date_str}):**\n\n"
-                f"{schedule_text}\n\n"
-                f"_Talabalar uchun eslatma: Agar darslardan qolib ketgan bo'lsangiz, shu tartibda yetib oling!_"
+                f"{final_schedule_text}\n\n"
+                f"_Talabalar uchun eslatma: Darslarni o'z vaqtida o'zlashtirib boring!_"
             )
             try:
                 await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode=ParseMode.MARKDOWN)
             except Exception as e:
                 logging.error(f"Kunlik jadvalni yuborishda xatolik ({chat_id}): {e}")
-
+                
 # --- Main App ---
 def main():
     db.init_db()  # <-- MANA SHU QATORNI QO'SHISH SHART!
