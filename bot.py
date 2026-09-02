@@ -1152,7 +1152,7 @@ def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.job_queue.run_repeating(check_reminders, interval=60, first=5)
-    app.job_queue.run_daily(send_daily_schedule_job, time=datetime.strptime("04:00", "%H:%M").time(), days=(0,1,2,3,4,5))
+    app.job_queue.run_daily(send_daily_schedule_job, time=datetime.strptime("18:50", "%H:%M").time(), days=(0,1,2,3,4,5))
     
     create_group_conv = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex(f"^{BTN_CREATE_GROUP}$"), start_create_group)],
