@@ -1066,7 +1066,7 @@ async def show_curriculum_menu(update: Update, context: ContextTypes.DEFAULT_TYP
     
     if items:
         for idx, item in enumerate(items, start=1):
-            text += f"{idx}. **{item['subject_title']}** — Jami: {item['total_count']} ta, Hozir: {item['current_index']}-dars\n"
+            text += f"{idx}. **{item['subject_title']}** — Jami: {item['total_count']} ta\n"
             keyboard.append([InlineKeyboardButton(f"❌ O'chirish: {item['subject_title']}", callback_data=f"delcurr_{item['id']}_{gid}")])
     else:
         text += "_Hali fanlar kiritilmagan._\n"
