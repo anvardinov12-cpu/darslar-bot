@@ -991,7 +991,7 @@ async def edit_day_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         f"📌 **{day_name} kuni uchun darslar:**\n\n"
         f"Hozirgi ro'yxat:\n{current_text if current_text else '_Hali kiritilmagan_'}\n\n"
-        "✍️ Ushbu kun uchun fanlar ro'yxatini yuboring (Fan Umumiy darslar ro'yxatida bo'lishi kerak!)  masalan: `1. Iqtisodiyot\n2. Huquqshunoslik\n3. Matematika`"
+        "✍️ Ushbu kun uchun fanlar ro'yxatini bitta qilib yuboring, u yangilanadi  (Fan Umumiy darslar ro'yxatida bo'lishi kerak!)  masalan: `1. Iqtisodiyot\n2. Huquqshunoslik\n3. Matematika`"
     )
     await query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=cancel_keyboard)
     return WAIT_DAY_SCHEDULE
@@ -1083,7 +1083,7 @@ async def start_add_curriculum(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data["curr_gid"] = gid
     
     await query.message.reply_text(
-        "📝 Yangi fan va uning jami dars sonini quyidagi formatda kiriting:\n\n`Fan nomi - Jami dars soni`\n_Misol: Dasturlash | 60_",
+        "📝 Yangi fan va uning jami dars sonini quyidagi formatda kiriting:\n\n`Fan nomi | Jami dars soni`\n_Misol: Dasturlash | 60_",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=cancel_keyboard
     )
@@ -1093,15 +1093,46 @@ async def save_curriculum_item(update: Update, context: ContextTypes.DEFAULT_TYP
     text = update.message.text.strip()
     gid = context.user_data.get("curr_gid")
     
-    try:
-        parts = text.split("|")
+    lines = text.split("\n")
+    added_count = 0
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+            
+        for sep in ["-", "|", ":"]:
+            if sep in line:
+                parts = line.split(sep, 1)
+                break
+        else:
+            await update.message.reply_text(
+                f"❌ Xatolik formatda! Qaytadan urinib ko'ring: `{line}`",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=cancel_keyboard
+            )
+            return WAIT_CURRICULUM
+            
         title = parts[0].strip()
-        total = int(parts[1].strip())
+        total_str = parts[1].strip()
         
+        if not total_str.isdigit():
+            await update.message.reply_text(
+                f"❌ Xatolik formatda! Dars soni faqat raqam bo'lishi kerak: `{total_str}`",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=cancel_keyboard
+            )
+            return WAIT_CURRICULUM
+            
+        total = int(total_str)
         db.add_curriculum_item(gid, title, total)
-        await update.message.reply_text(f"✅ **{title}** fani ({total} ta dars) qo'shildi!", parse_mode=ParseMode.MARKDOWN, reply_markup=main_menu_keyboard())
-    except Exception as e:
-        await update.message.reply_text(f"❌ Xatolik formatda! Qaytadan urinib ko'ring: `{e}`", parse_mode=ParseMode.MARKDOWN)
+        added_count += 1
+
+    await update.message.reply_text(
+        f"✅ Muvaffaqiyatli! Jami {added_count} ta fan ro'yxatga qo'shildi.", 
+        parse_mode=ParseMode.MARKDOWN, 
+        reply_markup=main_menu_keyboard()
+    )
     return ConversationHandler.END
 
 async def delete_curriculum_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
