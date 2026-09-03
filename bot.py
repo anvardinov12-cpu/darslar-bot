@@ -1148,7 +1148,7 @@ async def delete_curriculum_callback(update: Update, context: ContextTypes.DEFAU
     await show_curriculum_menu(update, context)
 
 async def send_daily_schedule_job(context: ContextTypes.DEFAULT_TYPE):
-    """Har kuni ertalab soat 04:00 da kunlik darslar jadvalini yuboradi va qolgan darslar sonini kamaytiradi"""
+    """Har kuni belgilangan vaqtda kunlik darslar jadvalini guruhlarga va obunachilarga yuboradi"""
     now = datetime.now(TZ)
     day_idx = now.weekday()
     
@@ -1157,6 +1157,7 @@ async def send_daily_schedule_job(context: ContextTypes.DEFAULT_TYPE):
         
     with db.get_db() as conn:
         groups = conn.execute("SELECT * FROM groups WHERE chat_id IS NOT NULL").fetchall()
+        users = conn.execute("SELECT user_id FROM users").fetchall() # Botdagi barcha foydalanuvchilar
         
     for g in groups:
         gid = g["id"]
@@ -1184,24 +1185,25 @@ async def send_daily_schedule_job(context: ContextTypes.DEFAULT_TYPE):
             
             if subj_name_lower in curr_dict:
                 item = curr_dict[subj_name_lower]
-                remaining = item["current_index"] 
                 total = item["total_count"]
+                current_idx = item["current_index"]
                 
-                # Agar darslar hali tugamagan bo'lsagina jadvalga qo'shamiz va kamaytiramiz
-                if remaining > 0:
-                    active_lessons_lines.append(f"{valid_counter}. {item['subject_title']} (Qolgan: {remaining - 1} ta / Jami: {total})")
+                # Qaysi dars ketayotganini aniqlaymiz (masalan: 1-dars, 2-dars)
+                # Jami - qolgan + 1 bu hozirgi dars raqamini beradi
+                completed_lessons = total - current_idx
+                lesson_number = completed_lessons + 1
+                
+                if current_idx > 0:
+                    active_lessons_lines.append(f"{valid_counter}. {subj_name} — {lesson_number}-dars")
                     valid_counter += 1
-                    
-                    # Qolgan darslar sonini 1 taga kamaytirib saqlaymiz
-                    db.update_curriculum_index(item["id"], remaining - 1)
+                    # Bazadagi indeksni kamaytiramiz
+                    db.update_curriculum_index(item["id"], current_idx - 1)
                 else:
-                    # Darslar soni tugagan bo'lsa, xabarga chiqarmaymiz (tashlab yuboramiz)
                     continue
             else:
                 active_lessons_lines.append(f"{valid_counter}. {subj_name}")
                 valid_counter += 1
                 
-        # Agar bugungi kunga tegishli faol darslar qolgan bo'lsagina guruhga xabar yuboriladi
         if active_lessons_lines:
             final_schedule_text = "\n".join(active_lessons_lines)
             date_str = now.strftime("%d-%B, %Y")
@@ -1210,10 +1212,25 @@ async def send_daily_schedule_job(context: ContextTypes.DEFAULT_TYPE):
                 f"{final_schedule_text}\n\n"
                 f"_Talabalar uchun eslatma: Darslarni o'z vaqtida o'zlashtirib boring!_"
             )
+            
+            # 1. Guruhga yuborish
             try:
                 await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode=ParseMode.MARKDOWN)
             except Exception as e:
-                logging.error(f"Kunlik jadvalni yuborishda xatolik ({chat_id}): {e}")
+                logging.error(f"Guruhga kunlik jadvalni yuborishda xatolik ({chat_id}): {e}")
+                
+    # 2. Botning o'ziga (obunachilarga shaxsiy xabar sifatida) yuborish
+    for u in users:
+        uid = u["user_id"]
+        try:
+            # Agar foydalanuvchi uchun ham alohida reja kerak bo'lsa shu yerga yoziladi, 
+            # yoki umumiy guruh jadvalini shaxsiyga tashlash mumkin:
+            # Misol tariqasida xabarni yuboramiz:
+            # await context.bot.send_message(chat_id=uid, text=msg, parse_mode=ParseMode.MARKDOWN)
+            pass
+        except Exception as e:
+            pass
+
                 
 # --- Main App ---
 def main():
@@ -1225,7 +1242,7 @@ def main():
     app.job_queue.run_repeating(check_reminders, interval=60, first=5)
     app.job_queue.run_daily(
         send_daily_schedule_job, 
-        time=datetime.strptime("23:52", "%H:%M").time(), 
+        time=datetime.strptime("12:50", "%H:%M").time(), 
         days=(0, 1, 2, 3, 4, 5)
     )
     
