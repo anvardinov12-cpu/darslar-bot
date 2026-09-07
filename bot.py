@@ -1148,16 +1148,14 @@ async def delete_curriculum_callback(update: Update, context: ContextTypes.DEFAU
     await show_curriculum_menu(update, context)
 
 async def send_daily_schedule_job(context: ContextTypes.DEFAULT_TYPE):
-    """Har kuni belgilangan vaqtda kunlik darslar jadvalini guruhlarga va obunachilarga yuboradi"""
     now = datetime.now(TZ)
     day_idx = now.weekday()
     
-    if day_idx > 5: # Yakshanba bo'lsa yubormaymiz
+    if day_idx > 5: # Yakshanba
         return
         
     with db.get_db() as conn:
         groups = conn.execute("SELECT * FROM groups WHERE chat_id IS NOT NULL").fetchall()
-        users = conn.execute("SELECT user_id FROM users").fetchall() # Botdagi barcha foydalanuvchilar
         
     for g in groups:
         gid = g["id"]
@@ -1185,19 +1183,13 @@ async def send_daily_schedule_job(context: ContextTypes.DEFAULT_TYPE):
             
             if subj_name_lower in curr_dict:
                 item = curr_dict[subj_name_lower]
+                remaining = item["current_index"] 
                 total = item["total_count"]
-                current_idx = item["current_index"]
                 
-                # Qaysi dars ketayotganini aniqlaymiz (masalan: 1-dars, 2-dars)
-                # Jami - qolgan + 1 bu hozirgi dars raqamini beradi
-                completed_lessons = total - current_idx
-                lesson_number = completed_lessons + 1
-                
-                if current_idx > 0:
-                    active_lessons_lines.append(f"{valid_counter}. {subj_name} — {lesson_number}-dars")
+                if remaining > 0:
+                    active_lessons_lines.append(f"{valid_counter}. {item['subject_title']} — {remaining}-dars")
                     valid_counter += 1
-                    # Bazadagi indeksni kamaytiramiz
-                    db.update_curriculum_index(item["id"], current_idx - 1)
+                    db.update_curriculum_index(item["id"], remaining - 1)
                 else:
                     continue
             else:
@@ -1206,12 +1198,17 @@ async def send_daily_schedule_job(context: ContextTypes.DEFAULT_TYPE):
                 
         if active_lessons_lines:
             final_schedule_text = "\n".join(active_lessons_lines)
-            date_str = now.strftime("%d-%B, %Y")
+            # Sana olib tashlandi, chunki Telegram o'zi vaqtni ko'rsatib turadi
             msg = (
-                f"📅 **Bugungi darslar rejasi ({date_str}):**\n\n"
+                f"📅 **Bugungi darslar rejasi:**\n\n"
                 f"{final_schedule_text}\n\n"
                 f"_Talabalar uchun eslatma: Darslarni o'z vaqtida o'zlashtirib boring!_"
             )
+            try:
+                await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode=ParseMode.MARKDOWN)
+            except Exception as e:
+                logging.error(f"Xatolik ({chat_id}): {e}")
+
             
             # 1. Guruhga yuborish
             try:
@@ -1241,10 +1238,12 @@ def main():
 
     app.job_queue.run_repeating(check_reminders, interval=60, first=5)
     app.job_queue.run_daily(
-        send_daily_schedule_job, 
-        time=datetime.strptime("12:50", "%H:%M").time(), 
-        days=(0, 1, 2, 3, 4, 5)
-    )
+    send_daily_schedule_job, 
+    time=datetime.strptime("12:50", "%H:%M").time(), 
+    days=(0, 1, 2, 3, 4, 5),
+    tz=TZ  # <--- Shu yerda vaqt mintaqasi ko'rsatiladi
+)
+
     
     create_group_conv = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex(f"^{BTN_CREATE_GROUP}$"), start_create_group)],
