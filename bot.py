@@ -1238,11 +1238,11 @@ def main():
 
     app.job_queue.run_repeating(check_reminders, interval=60, first=5)
     app.job_queue.run_daily(
-    send_daily_schedule_job, 
-    time=datetime.strptime("12:50", "%H:%M").time(), 
-    days=(0, 1, 2, 3, 4, 5),
-    tz=TZ  # <--- Shu yerda vaqt mintaqasi ko'rsatiladi
-)
+        send_daily_schedule_job, 
+        time=datetime.strptime("12:50", "%H:%M").time(), 
+        days=(0, 1, 2, 3, 4, 5),
+        tz=TZ
+    )
 
     
     create_group_conv = ConversationHandler(
