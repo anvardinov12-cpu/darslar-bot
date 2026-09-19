@@ -753,7 +753,7 @@ async def send_group_announce(update: Update, context: ContextTypes.DEFAULT_TYPE
         return ConversationHandler.END
 
     sent_count, failed_count = 0, 0
-    announce_text = f"📢 **E'LON [{group['name']}]**\n\n{msg.text}"
+    announce_text = f"📢 **E'lon! [{group['name']}]**\n\n{msg.text}"
 
     # 1. Shaxsiy chatlarga yuborish
     if subscribers:
@@ -1200,7 +1200,7 @@ async def send_daily_schedule_job(context: ContextTypes.DEFAULT_TYPE):
             final_schedule_text = "\n".join(active_lessons_lines)
             # Sana olib tashlandi, chunki Telegram o'zi vaqtni ko'rsatib turadi
             msg = (
-                f"📅 **Bugungi vazifa darslar rejasi:**\n\n"
+                f"📅 **Bugungi vazifa darslar rejasi!:**\n\n"
                 f"{final_schedule_text}\n\n"
                 f"_Talabalar uchun eslatma: Darslarni o'z vaqtida o'zlashtirib boring!_"
             )
