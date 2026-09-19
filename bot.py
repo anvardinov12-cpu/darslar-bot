@@ -1204,17 +1204,25 @@ async def send_daily_schedule_job(context: ContextTypes.DEFAULT_TYPE):
                 f"{final_schedule_text}\n\n"
                 f"_Talabalar uchun eslatma: Darslarni o'z vaqtida o'zlashtirib boring!_"
             )
-            try:
-                await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode=ParseMode.MARKDOWN)
-            except Exception as e:
-                logging.error(f"Xatolik ({chat_id}): {e}")
-
-            
-            # 1. Guruhga yuborish
-            try:
-                await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode=ParseMode.MARKDOWN)
-            except Exception as e:
-                logging.error(f"Guruhga kunlik jadvalni yuborishda xatolik ({chat_id}): {e}")
+           
+            if chat_id:
+                try:
+                    await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode=ParseMode.MARKDOWN)
+                except Exception as e:
+                    logging.error(f"Guruhga kunlik jadvalni yuborishda xatolik ({chat_id}): {e}")
+                
+            # 2. Faqat shu guruhga bot ichida obuna bo'lgan foydalanuvchilarning shaxsiy chatiga yuborish
+            subscribers = db.get_subscribers(gid)
+            if subscribers:
+                for sub in subscribers:
+                    uid = sub["user_id"]
+                    if uid == 0:
+                        continue
+                    try:
+                        await context.bot.send_message(chat_id=uid, text=msg, parse_mode=ParseMode.MARKDOWN)
+                    except Exception as e:
+                        # Foydalanuvchi botni bloklagan bo'lsa yoki xatolik bo'lsa o'tkazib yuboradi
+                        pass
                 
     # 2. Botning o'ziga (obunachilarga shaxsiy xabar sifatida) yuborish
     for u in users:
