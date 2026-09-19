@@ -1246,7 +1246,7 @@ def main():
 
     app.job_queue.run_repeating(check_reminders, interval=60, first=5)
     # Vaqtni va uning ichiga TZ (vaqt mintaqasini) beramiz
-    target_time = datetime.strptime("10:35", "%H:%M").time().replace(tzinfo=TZ)
+    target_time = datetime.strptime("10:55", "%H:%M").time().replace(tzinfo=TZ)
     
     app.job_queue.run_daily(
         send_daily_schedule_job, 
