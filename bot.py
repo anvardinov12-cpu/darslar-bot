@@ -576,9 +576,9 @@ async def group_manage_callback(update: Update, context: ContextTypes.DEFAULT_TY
         
         btns = [
             [InlineKeyboardButton("➕ Dars Qo'shish", callback_data=f"addlesson_{gid}")],
-            [InlineKeyboardButton("📋 Darslar Ro'yxati", callback_data=f"listlessons_{gid}")],
-            [InlineKeyboardButton("📅 Haftalik darslar jadvali", callback_data=f"weeksched_{gid}")],
-            [InlineKeyboardButton("📚 Barcha darslar adadi va ro'yxati", callback_data=f"curriculum_{gid}")],
+            [InlineKeyboardButton("📋 Jonli Darslar Ro'yxati", callback_data=f"listlessons_{gid}")],
+            [InlineKeyboardButton("📅 Haftalik vazifa darslar jadvali", callback_data=f"weeksched_{gid}")],
+            [InlineKeyboardButton("📚 Barcha vazifa darslar adadi va ro'yxati", callback_data=f"curriculum_{gid}")],
             [InlineKeyboardButton("👥 Guruh A'zolari", callback_data=f"groupmembers_{gid}")],
             [InlineKeyboardButton("📢 Guruhga E'lon Yuborish", callback_data=f"announcegroup_{gid}")],
         ]
@@ -1200,7 +1200,7 @@ async def send_daily_schedule_job(context: ContextTypes.DEFAULT_TYPE):
             final_schedule_text = "\n".join(active_lessons_lines)
             # Sana olib tashlandi, chunki Telegram o'zi vaqtni ko'rsatib turadi
             msg = (
-                f"📅 **Bugungi darslar rejasi:**\n\n"
+                f"📅 **Bugungi vazifa darslar rejasi:**\n\n"
                 f"{final_schedule_text}\n\n"
                 f"_Talabalar uchun eslatma: Darslarni o'z vaqtida o'zlashtirib boring!_"
             )
