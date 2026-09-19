@@ -563,11 +563,13 @@ def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.job_queue.run_repeating(check_reminders, interval=60, first=5)
+    # Vaqtni va uning ichiga TZ (vaqt mintaqasini) beramiz
+    target_time = datetime.strptime("15:10", "%H:%M").time().replace(tzinfo=TZ)
+    
     app.job_queue.run_daily(
         send_daily_schedule_job, 
-        time=datetime.strptime("12:50", "%H:%M").time(), 
-        days=(0, 1, 2, 3, 4, 5),
-        tz=TZ
+        time=target_time, 
+        days=(0, 1, 2, 3, 4, 5)
     )
     
     create_group_conv = ConversationHandler(
