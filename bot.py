@@ -830,6 +830,25 @@ async def admin_all_users_callback(update: Update, context: ContextTypes.DEFAULT
         await query.message.reply_text("Obunachilar topilmadi.")
         return
 
+    header = f"👥 <b>Barcha Bot Obunachilari ({len(users_list)} ta):</b>\n\n"
+    text = header
+    
+    for idx, u in enumerate(users_list, start=1):
+        uid = u["user_id"]
+        name = u["full_name"] or "Foydalanuvchi"
+        safe_name = html.escape(name)
+        line = f"\u200E{idx}. 👤 <a href='tg://user?id={uid}'>{safe_name}</a> (ID: <code>{uid}</code>)\n"
+
+        # Agar xabar uzunligi Telegram limitidan (4000 belgi) oshsa, yangi xabar yuborish
+        if len(text) + len(line) > 4000:
+            await query.message.reply_text(text, parse_mode=ParseMode.HTML)
+            text = header
+            
+        text += line
+
+    if text:
+        await query.message.reply_text(text, parse_mode=ParseMode.HTML)
+
 async def admin_all_groups_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer("⏳ Guruhlar ro'yxati olinmoqda...")
@@ -1224,18 +1243,6 @@ async def send_daily_schedule_job(context: ContextTypes.DEFAULT_TYPE):
                         # Foydalanuvchi botni bloklagan bo'lsa yoki xatolik bo'lsa o'tkazib yuboradi
                         pass
                 
-    # 2. Botning o'ziga (obunachilarga shaxsiy xabar sifatida) yuborish
-    for u in users:
-        uid = u["user_id"]
-        try:
-            # Agar foydalanuvchi uchun ham alohida reja kerak bo'lsa shu yerga yoziladi, 
-            # yoki umumiy guruh jadvalini shaxsiyga tashlash mumkin:
-            # Misol tariqasida xabarni yuboramiz:
-            # await context.bot.send_message(chat_id=uid, text=msg, parse_mode=ParseMode.MARKDOWN)
-            pass
-        except Exception as e:
-            pass
-
                 
 # --- Main App ---
 def main():
